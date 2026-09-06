@@ -25,9 +25,22 @@ load_dotenv(ROOT_DIR / ".env")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger("routy")
 
-mongo_url = os.environ["MONGO_URL"]
-client = AsyncIOMotorClient(mongo_url)
-db = client[os.environ["DB_NAME"]]
+mongo_url = os.environ.get("MONGO_URL", "mongodb://localhost:27017")
+try:
+    import socket
+    s = socket.socket()
+    s.settimeout(0.5)
+    s.connect(("127.0.0.1", 27017))
+    s.close()
+    client = AsyncIOMotorClient(mongo_url)
+    db = client[os.environ.get("DB_NAME", "test_database")]
+    logger.info("[Database] Connected to MongoDB at %s", mongo_url)
+except Exception:
+    from mongomock_motor import AsyncMongoMockClient
+    logger.info("[Database] Notice: Local MongoDB not detected. Activating integrated in-memory MongoDB fallback.")
+    client = AsyncMongoMockClient()
+    db = client[os.environ.get("DB_NAME", "test_database")]
+
 engine = Engine(speed_factor=float(os.getenv("SIM_SPEED_FACTOR", "3")))
 
 OSRM_URL = os.getenv("OSRM_URL", "https://router.project-osrm.org")

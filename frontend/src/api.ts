@@ -1,6 +1,29 @@
+import Constants from "expo-constants";
+import { Platform } from "react-native";
+
 import { storage } from "@/src/utils/storage";
 
-export const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL as string;
+function resolveBackendUrl(): string {
+  const envUrl = (process.env.EXPO_PUBLIC_BACKEND_URL || "").replace(/\/$/, "");
+  if (envUrl && !envUrl.includes("127.0.0.1") && !envUrl.includes("localhost")) {
+    return envUrl;
+  }
+  if (Platform.OS !== "web") {
+    const hostUri =
+      Constants.expoConfig?.hostUri ||
+      (Constants as any).manifest2?.extra?.expoGo?.debuggerHost ||
+      (Constants as any).manifest?.debuggerHost;
+    if (hostUri) {
+      const host = hostUri.split(":")[0];
+      if (host && host !== "localhost" && host !== "127.0.0.1") {
+        return `http://${host}:8000`;
+      }
+    }
+  }
+  return envUrl || "http://127.0.0.1:8000";
+}
+
+export const BACKEND_URL = resolveBackendUrl();
 export const API = `${BACKEND_URL}/api`;
 export const ADMIN_TOKEN_KEY = "routy_admin_token";
 

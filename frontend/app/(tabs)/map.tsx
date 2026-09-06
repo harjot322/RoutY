@@ -141,23 +141,27 @@ export default function MapScreen() {
     <View style={styles.root} testID="map-screen">
       <LeafletMap routes={mapRoutes} buses={mapBuses} user={coords} focus={focus} onBusPress={onBusPress} onStopPress={onStopPress} highlightRouteId={trackedBus?.route_id ?? null} />
 
-      {/* Top chrome */}
-      <View style={[styles.top, { paddingTop: insets.top + 8 }]} pointerEvents="box-none">
+      {/* Top Uber-style floating bar */}
+      <View style={[styles.top, { paddingTop: insets.top + 10 }]} pointerEvents="box-none">
         <View style={styles.topRow}>
           <Pressable style={styles.search} onPress={() => setSearchOpen(true)} testID="map-search-button">
-            <Icon name="magnify" size={26} color={colors.brandPrimary} />
-            <Text style={styles.searchText} numberOfLines={1}>{t("searchPlaceholder")}</Text>
+            <Icon name="magnify" size={24} color={colors.onSurface} />
+            <Text style={styles.searchText} numberOfLines={1}>
+              {lang === "hi" ? "कहाँ जाना है? / Where to?" : "Where to? · कहाँ जाना है?"}
+            </Text>
           </Pressable>
           <Pressable style={styles.langBtn} onPress={() => setLang(lang === "en" ? "hi" : "en")} testID="map-language-toggle">
-            <Icon name="translate" size={20} color={colors.onBrandSecondary} />
+            <Icon name="translate" size={18} color={colors.onSurface} />
             <Text style={styles.langText}>{lang === "en" ? "हिं" : "EN"}</Text>
           </Pressable>
         </View>
+
+        {/* Live Fleet Status Pill */}
         <View style={styles.statusRow}>
-          <View style={[styles.statusPill, { backgroundColor: status === "live" ? colors.success : colors.surfaceInverse }]} testID="live-status-pill">
-            <View style={styles.dot} />
-            <Text style={styles.statusText}>
-              {status === "live" ? t("live") : t("offline")} · {t("liveBuses", { n: snapshot?.buses.length ?? 0 })}
+          <View style={[styles.statusPill, { backgroundColor: status === "live" ? colors.surface : colors.surfaceInverse }]} testID="live-status-pill">
+            <View style={[styles.dot, { backgroundColor: status === "live" ? colors.success : colors.muted }]} />
+            <Text style={[styles.statusText, { color: status === "live" ? colors.onSurface : colors.onSurfaceInverse }]}>
+              {status === "live" ? (lang === "hi" ? "● लाइव" : "● LIVE") : t("offline")} · {t("liveBuses", { n: snapshot?.buses.length ?? 0 })}
             </Text>
           </View>
         </View>
@@ -262,11 +266,18 @@ export default function MapScreen() {
           ) : nearest ? (
             <View style={{ gap: 12 }}>
               <View style={styles.rowCenter}>
-                <Icon name="bus-stop" size={28} color={colors.brandPrimary} />
+                <View style={styles.stopIconWrap}>
+                  <Icon name="bus-stop" size={24} color={colors.onSurface} />
+                </View>
                 <View style={{ flex: 1, minWidth: 0 }}>
                   <Text style={styles.label}>{t("nearestStop")}</Text>
-                  <Text style={styles.stopName} numberOfLines={1} testID="nearest-stop-name">{tr(nearest.name, nearest.name_hi)}</Text>
-                  {distToStop != null && <Text style={styles.cardSub}>{t("away", { d: fmtDistance(distToStop, lang) })}</Text>}
+                  <Text style={styles.stopName} numberOfLines={1} testID="nearest-stop-name">
+                    {lang === "hi" ? (nearest.name_hi || nearest.name) : nearest.name}
+                  </Text>
+                  <Text style={styles.cardSub} numberOfLines={1}>
+                    {lang === "hi" ? nearest.name : (nearest.name_hi || "")}
+                    {distToStop != null ? ` · ${fmtDistance(distToStop, lang)}` : ""}
+                  </Text>
                 </View>
                 <View style={styles.etaCol}>
                   <Text style={styles.label}>{t("nextBus")}</Text>
@@ -282,10 +293,10 @@ export default function MapScreen() {
                 {etaForStop != null && (
                   <>
                     <Pressable style={styles.speakBtn} onPress={speakEta} testID="announce-eta-button">
-                      <Icon name="volume-high" size={26} color={colors.onBrandSecondary} />
+                      <Icon name="volume-high" size={22} color={colors.onSurface} />
                     </Pressable>
                     <Pressable style={styles.speakBtn} onPress={shareEta} testID="share-eta-button">
-                      <Icon name="share-variant" size={26} color={colors.onBrandSecondary} />
+                      <Icon name="share-variant" size={22} color={colors.onSurface} />
                     </Pressable>
                   </>
                 )}
@@ -311,7 +322,7 @@ export default function MapScreen() {
             </View>
             <Text style={styles.sheetBody}>{t("sosBody")}</Text>
             {trackedBus && <Text style={styles.cardSub}>{trackedBus.route_number} · {trackedBus.plate}</Text>}
-            <BigButton testID="sos-confirm-button" label={t("sosSend")} icon="alarm-light" variant="danger" onPress={sendSos} loading={sosSending} style={{ minHeight: 64 }} />
+            <BigButton testID="sos-confirm-button" label={t("sosSend")} icon="alarm-light" variant="danger" onPress={sendSos} loading={sosSending} style={{ minHeight: 56 }} />
             <BigButton testID="sos-cancel-button" label={t("cancel")} variant="ghost" onPress={() => setSosOpen(false)} />
           </Pressable>
         </Pressable>
@@ -323,62 +334,157 @@ export default function MapScreen() {
 const useStyles = makeStyles((colors) => ({
   root: { flex: 1, backgroundColor: colors.surfaceTertiary },
   top: { position: "absolute", top: 0, left: 0, right: 0, paddingHorizontal: 16, gap: 8 },
-  topRow: { flexDirection: "row", gap: 8 },
+  topRow: { flexDirection: "row", gap: 8, alignItems: "center" },
   search: {
     flex: 1,
-    height: 56,
-    borderRadius: 12,
+    height: 52,
+    borderRadius: 26,
     backgroundColor: colors.surface,
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
+    gap: 10,
     paddingHorizontal: 16,
     borderWidth: 1,
     borderColor: colors.border,
-    shadowColor: colors.borderStrong,
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
+    shadowColor: "#0F172A",
+    shadowOpacity: 0.08,
+    shadowRadius: 14,
     shadowOffset: { width: 0, height: 3 },
     elevation: 4,
   },
-  searchText: { flex: 1, fontSize: 16, color: colors.muted, fontWeight: "600" },
-  langBtn: { width: 56, height: 56, borderRadius: 12, backgroundColor: colors.brandSecondary, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: colors.brandTertiary },
-  langText: { fontSize: 13, fontWeight: "800", color: colors.onBrandSecondary },
+  searchText: { flex: 1, fontSize: 15, color: colors.muted, fontWeight: "600" },
+  langBtn: {
+    height: 52,
+    paddingHorizontal: 16,
+    borderRadius: 26,
+    backgroundColor: colors.surface,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    borderWidth: 1,
+    borderColor: colors.border,
+    shadowColor: "#0F172A",
+    shadowOpacity: 0.06,
+    shadowRadius: 10,
+    elevation: 3,
+  },
+  langText: { fontSize: 13, fontWeight: "800", color: colors.onSurface },
   statusRow: { flexDirection: "row" },
-  statusPill: { flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 12, height: 32, borderRadius: 999 },
-  dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.onSuccess },
-  statusText: { color: colors.onSuccess, fontWeight: "700", fontSize: 13 },
-  bottom: { position: "absolute", left: 16, right: 16, bottom: 0, gap: 12 },
-  fabRow: { flexDirection: "row", justifyContent: "flex-end", alignItems: "flex-end", gap: 12 },
-  locateFab: { width: 56, height: 56, borderRadius: 28, backgroundColor: colors.surface, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: colors.border, elevation: 4 },
-  sosFab: { width: 72, height: 72, borderRadius: 36, backgroundColor: colors.error, alignItems: "center", justifyContent: "center", elevation: 6, shadowColor: colors.error, shadowOpacity: 0.4, shadowRadius: 10, shadowOffset: { width: 0, height: 4 } },
-  sosText: { color: colors.onError, fontWeight: "900", fontSize: 14, marginTop: -2 },
-  card: { backgroundColor: colors.surface, borderRadius: 16, padding: 16, gap: 12, borderWidth: 1, borderColor: colors.border, elevation: 6, shadowColor: colors.borderStrong, shadowOpacity: 0.15, shadowRadius: 10, shadowOffset: { width: 0, height: 4 } },
+  statusPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 10,
+    height: 28,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: colors.border,
+    shadowColor: "#0F172A",
+    shadowOpacity: 0.05,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  dot: { width: 7, height: 7, borderRadius: 3.5 },
+  statusText: { fontWeight: "700", fontSize: 12 },
+  bottom: { position: "absolute", left: 16, right: 16, bottom: 0, gap: 10 },
+  fabRow: { flexDirection: "row", justifyContent: "flex-end", alignItems: "flex-end", gap: 10 },
+  locateFab: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: colors.surface,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: colors.border,
+    shadowColor: "#0F172A",
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  sosFab: {
+    width: 58,
+    height: 58,
+    borderRadius: 29,
+    backgroundColor: colors.error,
+    alignItems: "center",
+    justifyContent: "center",
+    elevation: 6,
+    shadowColor: colors.error,
+    shadowOpacity: 0.4,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 3 },
+  },
+  sosText: { color: colors.onError, fontWeight: "900", fontSize: 13, marginTop: -2 },
+  card: {
+    backgroundColor: colors.surface,
+    borderRadius: 24,
+    padding: 18,
+    gap: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    elevation: 8,
+    shadowColor: "#0F172A",
+    shadowOpacity: 0.10,
+    shadowRadius: 20,
+    shadowOffset: { width: 0, height: 6 },
+  },
   cardHead: { flexDirection: "row", alignItems: "center", gap: 12, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: colors.divider },
-  routeBadge: { width: 48, height: 48, borderRadius: 12, alignItems: "center", justifyContent: "center", flexShrink: 0 },
-  routeBadgeText: { color: colors.onBrand, fontWeight: "800", fontSize: 15 },
+  routeBadge: { width: 44, height: 44, borderRadius: 12, alignItems: "center", justifyContent: "center", flexShrink: 0 },
+  routeBadgeText: { color: colors.onBrand, fontWeight: "800", fontSize: 14 },
   cardTitle: { fontSize: 16, fontWeight: "800", color: colors.onSurface },
-  cardSub: { fontSize: 13, color: colors.muted, marginTop: 2 },
-  iconBtn: { width: 44, height: 44, alignItems: "center", justifyContent: "center", flexShrink: 0 },
+  cardSub: { fontSize: 13, color: colors.muted, marginTop: 1 },
+  iconBtn: { width: 40, height: 40, alignItems: "center", justifyContent: "center", flexShrink: 0 },
   rowCenter: { flexDirection: "row", alignItems: "center", gap: 12 },
+  stopIconWrap: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: colors.surfaceTertiary,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   etaCol: { alignItems: "flex-end", maxWidth: "42%", flexShrink: 0 },
-  label: { fontSize: 12, color: colors.muted, fontWeight: "700", textTransform: "uppercase" },
-  stopName: { fontSize: 18, fontWeight: "800", color: colors.onSurface },
+  label: { fontSize: 11, color: colors.muted, fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.5 },
+  stopName: { fontSize: 17, fontWeight: "800", color: colors.onSurface },
   eta: { fontSize: 24, fontWeight: "900", color: colors.brandPrimary },
-  hint: { flex: 1, fontSize: 15, color: colors.onSurfaceSecondary, lineHeight: 21 },
-  actions: { flexDirection: "row", gap: 12 },
-  speakBtn: { width: 56, height: 56, borderRadius: 12, backgroundColor: colors.brandSecondary, alignItems: "center", justifyContent: "center", flexShrink: 0 },
-  favRow: { height: 48, flexGrow: 0 },
+  hint: { flex: 1, fontSize: 14, color: colors.onSurfaceSecondary, lineHeight: 20 },
+  actions: { flexDirection: "row", gap: 10 },
+  speakBtn: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: colors.surfaceTertiary,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
+  },
+  favRow: { height: 44, flexGrow: 0 },
   favChips: { gap: 8, alignItems: "center", paddingRight: 8 },
-  favChip: { height: 40, maxWidth: 200, paddingHorizontal: 12, borderRadius: 999, backgroundColor: colors.surface, borderWidth: 1.5, borderColor: colors.border, flexDirection: "row", alignItems: "center", gap: 6, flexShrink: 0 },
+  favChip: {
+    height: 38,
+    maxWidth: 200,
+    paddingHorizontal: 14,
+    borderRadius: 19,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    flexShrink: 0,
+  },
   favChipActive: { backgroundColor: colors.brandPrimary, borderColor: colors.brandPrimary },
-  favChipText: { fontSize: 14, fontWeight: "700", color: colors.onSurface },
-  arrivalRow: { flexDirection: "row", alignItems: "center", gap: 12, minHeight: 52 },
+  favChipText: { fontSize: 13, fontWeight: "700", color: colors.onSurface },
+  arrivalRow: { flexDirection: "row", alignItems: "center", gap: 12, minHeight: 48 },
   arrivalName: { flex: 1, minWidth: 0, fontSize: 15, fontWeight: "700", color: colors.onSurface },
-  backdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.55)", justifyContent: "flex-end" },
+  backdrop: { flex: 1, backgroundColor: "rgba(15,23,42,0.6)", justifyContent: "flex-end" },
   sheet: { backgroundColor: colors.surface, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, gap: 16 },
   sosHead: { flexDirection: "row", alignItems: "center", gap: 16 },
-  sosIcon: { width: 64, height: 64, borderRadius: 32, backgroundColor: colors.error, alignItems: "center", justifyContent: "center" },
-  sheetTitle: { fontSize: 22, fontWeight: "900", color: colors.onSurface, flex: 1 },
-  sheetBody: { fontSize: 16, color: colors.onSurfaceSecondary, lineHeight: 23 },
+  sosIcon: { width: 56, height: 56, borderRadius: 28, backgroundColor: colors.error, alignItems: "center", justifyContent: "center" },
+  sheetTitle: { fontSize: 20, fontWeight: "900", color: colors.onSurface, flex: 1 },
+  sheetBody: { fontSize: 15, color: colors.onSurfaceSecondary, lineHeight: 22 },
 }));

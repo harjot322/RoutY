@@ -36,56 +36,44 @@ import { Appearance, StyleSheet, useColorScheme } from "react-native";
 export type ColorScheme = "light" | "dark";
 
 const light = {
-  // ---------------------------------------------------------------------------
   // Surfaces: backgrounds, from the screen down to small fills.
-  // Each `on` key is the text and icon color for that background.
-  // ---------------------------------------------------------------------------
-  surface: "#FFFFFF", // primary canvas, most of every screen
-  onSurface: "#050505", // text and icons on the canvas
-  surfaceSecondary: "#F5F5F5", // cards, sheets, list rows
-  onSurfaceSecondary: "#1A1A1A", // text and icons on cards, sheets, rows
-  surfaceTertiary: "#EAEAEA", // input backgrounds, chips, deepest nesting
-  onSurfaceTertiary: "#2C2C2C", // text on inputs and chips; also muted text
-  surfaceInverse: "#121212", // tooltips, snackbars, anything popping against the theme
-  onSurfaceInverse: "#FFFFFF", // text and icons on the inverse surface
-  muted: "#666666", // subdued text on surface: captions, timestamps, placeholders
+  surface: "#FFFFFF", // primary canvas
+  onSurface: "#0F172A", // high-contrast slate-900 text & icons
+  surfaceSecondary: "#F8FAFC", // cards, sheets, list rows (slate-50)
+  onSurfaceSecondary: "#1E293B", // slate-800
+  surfaceTertiary: "#F1F5F9", // input backgrounds, chips (slate-100)
+  onSurfaceTertiary: "#334155", // slate-700
+  surfaceInverse: "#0F172A", // midnight carbon popouts
+  onSurfaceInverse: "#FFFFFF",
+  muted: "#64748B", // slate-500 captions, placeholders
 
-  // ---------------------------------------------------------------------------
-  // Brand: the identity color and the fills built from it.
-  // Neutral by default; replace with the design guidelines values.
-  // ---------------------------------------------------------------------------
-  brand: "#C04A00", // base hue, anchor only; Primary, Secondary, Tertiary are weights of it
-  onBrand: "#FFFFFF", // text and icons placed directly on brand
-  brandPrimary: "#C04A00", // primary CTA, active tab indicator, selected states
-  onBrandPrimary: "#FFFFFF", // text and icons on brandPrimary
-  brandSecondary: "#FBE9E0", // secondary CTA, less prominent accents
-  onBrandSecondary: "#7A2F00", // text and icons on brandSecondary
-  brandTertiary: "#F2D8C9", // chips, tags, badges, subtle brand moments
-  onBrandTertiary: "#5C2300", // text and icons on brandTertiary
+  // Brand: Uber-grade modern midnight carbon with electric accents
+  brand: "#0F172A",
+  onBrand: "#FFFFFF",
+  brandPrimary: "#0F172A", // deep carbon CTA / selected state
+  onBrandPrimary: "#FFFFFF",
+  brandSecondary: "#F1F5F9", // subtle slate accent
+  onBrandSecondary: "#0F172A",
+  brandTertiary: "#E2E8F0",
+  onBrandTertiary: "#1E293B",
 
-  // ---------------------------------------------------------------------------
-  // Status: semantic only, never decorative. Fill for badges, banners and
-  // toasts; the `on` key is text on that fill. The plain key is also safe as
-  // text on `surface`.
-  // ---------------------------------------------------------------------------
-  success: "#1B7F31",
+  // Status: Ride-hailing semantic indicators (Walk / Run / Wait / SOS)
+  success: "#10B981", // Emerald 500 (Walk / Live)
   onSuccess: "#FFFFFF",
-  warning: "#B87503",
+  warning: "#F59E0B", // Amber 500 (Run / Caution)
   onWarning: "#FFFFFF",
-  error: "#D32F2F",
+  error: "#EF4444", // Crimson 500 (Wait / SOS)
   onError: "#FFFFFF",
-  info: "#4A4A4A",
+  info: "#3B82F6", // Blue 500
   onInfo: "#FFFFFF",
-  successSoft: "#E3F3E6",
-  warningSoft: "#FBEFD9",
-  errorSoft: "#FBE3E3",
+  successSoft: "#ECFDF5",
+  warningSoft: "#FFFBEB",
+  errorSoft: "#FEF2F2",
 
-  // ---------------------------------------------------------------------------
-  // Lines
-  // ---------------------------------------------------------------------------
-  border: "#E0E0E0", // hairline outline, 0.5pt or 1pt max: inputs, cards
-  borderStrong: "#000000", // focus rings, selected outlines, 1.5pt max
-  divider: "#EBEBEB", // subtle list separators
+  // Lines & borders
+  border: "#E2E8F0", // hairline outline (slate-200)
+  borderStrong: "#0F172A", // selected outlines
+  divider: "#F1F5F9",
 };
 
 export type ThemeColors = typeof light;
@@ -99,7 +87,7 @@ export const themes: { light: ThemeColors; dark?: ThemeColors } = { light };
 // follow the device. Every useTheme() consumer re-renders. Persisting the
 // choice and re-applying it on launch is the toggle's job.
 export function setColorScheme(scheme: ColorScheme | null) {
-  Appearance.setColorScheme?.(scheme);
+  (Appearance as any).setColorScheme?.(scheme);
 }
 
 // Keep native surfaces (alerts, pickers, navigation chrome) on the schemes this
@@ -109,7 +97,7 @@ setColorScheme?.(themes.dark ? null : defaultScheme);
 
 export function useTheme(): { scheme: ColorScheme; colors: ThemeColors } {
   const system = useColorScheme();
-  const scheme: ColorScheme = system && themes[system] ? system : defaultScheme;
+  const scheme: ColorScheme = system === "dark" && themes.dark ? "dark" : defaultScheme;
   return { scheme, colors: themes[scheme] ?? themes.light };
 }
 

@@ -7,23 +7,29 @@ import { useLanguage } from "@/src/i18n/LanguageContext";
 import { makeStyles, useTheme } from "@/src/theme";
 
 export function RouteCard({ route, onPress }: { route: Route; onPress: () => void }) {
-  const { t, tr } = useLanguage();
+  const { t, lang } = useLanguage();
   const styles = useStyles();
   const { colors } = useTheme();
   return (
     <Pressable onPress={onPress} style={({ pressed }) => [styles.card, pressed && styles.pressed]} testID={`route-card-${route.number}`}>
-      <View style={[styles.bar, { backgroundColor: route.color }]} />
       <View style={[styles.numBadge, { backgroundColor: route.color }]}>
-        <Icon name="bus" size={20} color={colors.onBrand} />
+        <Icon name="bus" size={18} color="#FFFFFF" />
         <Text style={styles.numText}>{route.number}</Text>
       </View>
       <View style={styles.body}>
-        <Text style={styles.name} numberOfLines={2}>{tr(route.name, route.name_hi)}</Text>
+        <Text style={styles.name} numberOfLines={1}>
+          {lang === "hi" ? (route.name_hi || route.name) : route.name}
+        </Text>
+        <Text style={styles.subName} numberOfLines={1}>
+          {lang === "hi" ? route.name : (route.name_hi || "")}
+        </Text>
         <Text style={styles.meta}>
           {t("liveBuses", { n: route.bus_count ?? 0 })} · {t("stops", { n: route.stops.length })}
         </Text>
       </View>
-      <Icon name="chevron-right" size={28} color={colors.muted} />
+      <View style={styles.arrowWrap}>
+        <Icon name="chevron-right" size={24} color={colors.muted} />
+      </View>
     </Pressable>
   );
 }
@@ -32,20 +38,26 @@ const useStyles = makeStyles((colors) => ({
   card: {
     flexDirection: "row",
     alignItems: "center",
-    minHeight: 72,
+    minHeight: 80,
     backgroundColor: colors.surface,
-    borderRadius: 12,
+    borderRadius: 18,
     borderWidth: 1,
     borderColor: colors.border,
-    paddingRight: 12,
-    overflow: "hidden",
-    gap: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    gap: 14,
+    shadowColor: "#0F172A",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
   },
-  pressed: { backgroundColor: colors.surfaceSecondary },
-  bar: { width: 8, alignSelf: "stretch" },
-  numBadge: { width: 56, height: 56, borderRadius: 12, alignItems: "center", justifyContent: "center" },
-  numText: { color: colors.onBrand, fontWeight: "800", fontSize: 14 },
-  body: { flex: 1, gap: 4, paddingVertical: 8 },
-  name: { fontSize: 17, fontWeight: "700", color: colors.onSurface },
-  meta: { fontSize: 13, color: colors.muted },
+  pressed: { backgroundColor: colors.surfaceSecondary, opacity: 0.9 },
+  numBadge: { width: 50, height: 50, borderRadius: 14, alignItems: "center", justifyContent: "center", gap: 2 },
+  numText: { color: "#FFFFFF", fontWeight: "900", fontSize: 13, letterSpacing: 0.5 },
+  body: { flex: 1, gap: 2 },
+  name: { fontSize: 16, fontWeight: "800", color: colors.onSurface },
+  subName: { fontSize: 13, color: colors.muted, fontWeight: "600" },
+  meta: { fontSize: 12, color: colors.muted, marginTop: 2, fontWeight: "600" },
+  arrowWrap: { width: 32, height: 32, borderRadius: 16, backgroundColor: colors.surfaceSecondary, alignItems: "center", justifyContent: "center" },
 }));
