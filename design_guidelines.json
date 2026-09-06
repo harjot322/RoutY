@@ -1,0 +1,157 @@
+{
+  "app_name": "RoutY",
+  "personality": "1 iOS-Native Clean",
+  "personality_one_liner": "A high-contrast, strictly functional interface designed for maximum outdoor legibility and absolute simplicity for rural commuters.",
+  "color": {
+    "surface": "#FFFFFF",
+    "onSurface": "#050505",
+    "surfaceSecondary": "#F5F5F5",
+    "onSurfaceSecondary": "#1A1A1A",
+    "surfaceTertiary": "#EAEAEA",
+    "onSurfaceTertiary": "#2C2C2C",
+    "surfaceInverse": "#121212",
+    "onSurfaceInverse": "#FFFFFF",
+    "brand": "#C04A00",
+    "onBrand": "#FFFFFF",
+    "brandPrimary": "#C04A00",
+    "onBrandPrimary": "#FFFFFF",
+    "brandSecondary": "#FBE9E0",
+    "onBrandSecondary": "#7A2F00",
+    "brandTertiary": "#F2D8C9",
+    "onBrandTertiary": "#5C2300",
+    "success": "#1B7F31",
+    "onSuccess": "#FFFFFF",
+    "warning": "#B87503",
+    "onWarning": "#FFFFFF",
+    "error": "#D32F2F",
+    "onError": "#FFFFFF",
+    "info": "#4A4A4A",
+    "onInfo": "#FFFFFF",
+    "border": "#E0E0E0",
+    "borderStrong": "#000000",
+    "divider": "#EBEBEB",
+    "muted": "#666666"
+  },
+  "typography": {
+    "displayFontFamily": "Plus Jakarta Sans",
+    "textFontFamily": "Plus Jakarta Sans",
+    "scale": {
+      "sm": 12,
+      "base": 14,
+      "lg": 16,
+      "xl": 20,
+      "2xl": 24
+    }
+  },
+  "spacing": {
+    "rule": "Use generous padding for outdoor legibility. Touch targets must be at least 56px, preferably 64px for primary actions.",
+    "xs": 4,
+    "sm": 8,
+    "md": 12,
+    "lg": 16,
+    "xl": 24,
+    "2xl": 32,
+    "3xl": 48
+  },
+  "radius_tokens": {
+    "sm": 6,
+    "md": 12,
+    "lg": 16,
+    "pill": 999
+  },
+  "shadow_tier": "1",
+  "navigation": "bottom_tabs",
+  "icon_set": "MaterialCommunityIcons",
+  "glassmorphism": {
+    "enabled": false,
+    "do's": [],
+    "dont's": [
+      "Strictly DO NOT use glass/blur effects. The target devices are low-end Androids in rural areas, and outdoor visibility requires solid, opaque surfaces."
+    ]
+  },
+  "platform_libraries": {
+    "glass": {
+      "ios": "solid surfaceSecondary",
+      "android": "solid surfaceSecondary",
+      "low_end_android_fallback": "solid surfaceSecondary"
+    },
+    "image": "expo-image",
+    "blur": "expo-blur",
+    "bottom_sheet": "@gorhom/bottom-sheet",
+    "animation": "react-native-reanimated",
+    "gesture": "react-native-gesture-handler"
+  },
+  "screens": [
+    {
+      "name": "Map (Home)",
+      "purpose": "Interactive map with live bus tracking, search, and immediate SOS access.",
+      "states": {
+        "loading": "Map skeleton with centered loading spinner.",
+        "empty": "No nearby buses found - 'Search for a route' prompt.",
+        "error": "Offline Reconnecting banner across the top."
+      },
+      "layout": "Full-screen map view as the root canvas. Floating search bar at the top (safe area) containing 'Search Route' and a quick EN/HI language toggle. A floating red SOS FAB (error color) anchored to the bottom right. A persistent bottom sheet (solid surfaceSecondary) displaying the nearest stop ETA and the Catchability Index (Walk/Run/Wait)."
+    },
+    {
+      "name": "Routes",
+      "purpose": "Searchable list of all active routes and schedules.",
+      "states": {
+        "loading": "List skeletons.",
+        "empty": "Illustration of a bus with 'No routes found. Try another search.'",
+        "error": "Failed to load routes. Retry button."
+      },
+      "layout": "Sticky header with search input. Vertical scroll list of route cards. Each card must have a massive touch target (min 64px height) displaying Route Number, Origin-Destination, and a chevron."
+    },
+    {
+      "name": "Settings",
+      "purpose": "Manage accessibility, language, and admin login access.",
+      "states": {
+        "loading": "Standard spinner.",
+        "empty": "N/A",
+        "error": "N/A"
+      },
+      "layout": "List-based layout. Toggles for Audio Announcements (speaker icon) and Language (English/Hindi). A distinct, muted bottom link for 'Admin Access' (secure authentication entry)."
+    },
+    {
+      "name": "Admin Dashboard (Hidden/Secured)",
+      "purpose": "Monitor live bus movements, analytics, and manage routes.",
+      "states": {
+        "loading": "Skeleton of charts and lists.",
+        "empty": "No active buses to monitor.",
+        "error": "Failed to fetch analytics."
+      },
+      "layout": "Data-dense utility layout. Route replay slider, bunching warnings list, and demand heatmap toggle. Kept structurally clean without heavy graphics."
+    }
+  ],
+  "images": {
+    "bus_hero": {
+      "url": "https://images.unsplash.com/photo-1557223562-6c77ef16210f?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDk1Nzd8MHwxfHNlYXJjaHwyfHxwdWJsaWMlMjB0cmFuc3BvcnQlMjBidXN8ZW58MHx8fHwxNzg4NzIzNjg3fDA&ixlib=rb-4.1.0&q=85",
+      "alt": "Public transport bus on a road"
+    },
+    "sos_icon": {
+      "url": "https://images.unsplash.com/photo-1588268393007-068bc70a443d?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2NzZ8MHwxfHNlYXJjaHwxfHxzb3MlMjBlbWVyZ2VuY3klMjByZWR8ZW58MHx8fHwxNzg4NzIzNjg3fDA&ixlib=rb-4.1.0&q=85",
+      "alt": "Red illuminated emergency sign"
+    },
+    "map_placeholder": {
+      "url": "https://images.unsplash.com/photo-1594935975218-a3596da034a3?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1ODh8MHwxfHNlYXJjaHwxfHxpbnRlcmFjdGl2ZSUyMG1hcCUyMGNsZWFufGVufDB8fHx8MTc4ODcyMzY4N3ww&ixlib=rb-4.1.0&q=85",
+      "alt": "Clean interactive map visualization"
+    }
+  },
+  "haptics": {
+    "primary_button": "medium",
+    "tab_change": "light",
+    "sos_button": "heavy",
+    "catchability_update": "light"
+  },
+  "instructions_to_main_agent": [
+    "PREMIUM REQUIREMENT: Ensure extreme high-contrast for outdoor visibility. Use stark black text (#050505) on white backgrounds (#FFFFFF). Avoid all blues, purples, or low-contrast pastels.",
+    "No Blur/Glassmorphism: Target devices are likely low-end Androids. Use solid backgrounds (e.g., surfaceSecondary) with standard elevation shadows instead of expo-blur.",
+    "Catchability Index Rule: Never rely on color alone. Pair the color-coded verdict with text and icons (e.g., Green 🚶 Walk, Yellow 🏃 Run, Red ✋ Wait). Ensure the yellow (warning) is darkened to #B87503 to maintain a 3:1 contrast ratio on white.",
+    "Touch Targets: Increase minimum touch targets to 56px-64px. Rural users may not be familiar with precise tapping; larger hit areas reduce friction.",
+    "Offline State: Build a graceful 'Reconnecting...' banner using the surfaceInverse token that drops down at the top of the screen when offline.",
+    "SOS Feature: The SOS panic button must use the 'error' color token (#D32F2F) and be prominent (FAB on the Map screen). Wire it to a heavy haptic feedback.",
+    "Audio & Language: Build explicit, large toggles for EN/HI language switching and Native Audio Announcements in the settings and/or floating search bar.",
+    "Images: Use the provided map_placeholder for the map view if a native map component isn't immediately configured, and ensure text overlays have a proper vertical gradient scrim if placed over images.",
+    "Do not display 'made with emergent' anywhere in the application."
+  ]
+}
