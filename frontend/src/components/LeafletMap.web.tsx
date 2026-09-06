@@ -30,7 +30,7 @@ export function LeafletMap(props: LeafletMapProps) {
   }, [onBusPress, onStopPress]);
 
   return (
-    <View style={[styles.wrap, props.style]} testID={props.testID ?? "leaflet-map"}>
+    <View style={[styles.wrap, props.style ?? styles.fill]} testID={props.testID ?? "leaflet-map"}>
       {React.createElement("iframe", {
         ref,
         srcDoc: MAP_HTML,
@@ -43,5 +43,6 @@ export function LeafletMap(props: LeafletMapProps) {
 }
 
 const useStyles = makeStyles((colors) => ({
-  wrap: { flex: 1, backgroundColor: colors.surfaceTertiary, overflow: "hidden" },
+  wrap: { backgroundColor: colors.surfaceTertiary, overflow: "hidden" },
+  fill: { flex: 1 },
 }));

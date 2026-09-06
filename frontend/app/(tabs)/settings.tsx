@@ -72,9 +72,18 @@ export default function SettingsScreen() {
           <Text style={styles.sub}>{t("version")}</Text>
         </View>
 
+        <Pressable style={styles.adminRow} onPress={() => router.push("/suggest")} testID="suggest-route-link">
+          <Icon name="lightbulb-on-outline" size={26} color={colors.brandPrimary} />
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text style={[styles.adminText, { color: colors.onSurface }]}>{t("suggestRoute")}</Text>
+            <Text style={styles.sub}>{t("suggestHint")}</Text>
+          </View>
+          <Icon name="chevron-right" size={24} color={colors.muted} />
+        </Pressable>
+
         <Pressable style={styles.adminRow} onPress={() => router.push("/admin/login")} testID="admin-access-link">
           <Icon name="shield-account-outline" size={24} color={colors.muted} />
-          <View style={{ flex: 1 }}>
+          <View style={{ flex: 1, minWidth: 0 }}>
             <Text style={styles.adminText}>{t("adminAccess")}</Text>
             <Text style={styles.sub}>{t("adminHint")}</Text>
           </View>

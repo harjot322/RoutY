@@ -134,9 +134,54 @@ def build_route_doc(number: str, name: str, name_hi: str, color: str, stops_in: 
         "stops": stops,
         "path": {"type": "LineString", "coordinates": coords},
         "length_m": round(cum[-1], 1),
+        "path_source": "straight",
         "active": True,
         "created_at": now_iso(),
     }
+
+
+def apply_road_path(route: dict, coords: List[List[float]], snapped: Optional[List[List[float]]] = None) -> dict:
+    """Replace a route's path with real road geometry (e.g. from OSRM). Keeps ids.
+    `snapped` = per-stop [lng, lat] road-snapped locations (optional)."""
+    cum = [0.0]
+    for i in range(1, len(coords)):
+        cum.append(cum[-1] + haversine(coords[i - 1][1], coords[i - 1][0], coords[i][1], coords[i][0]))
+    last_idx = 0
+    for n, s in enumerate(route["stops"]):
+        if snapped and n < len(snapped):
+            s["lng"], s["lat"] = snapped[n][0], snapped[n][1]
+        # nearest vertex after the previous stop's vertex (keeps order monotonic)
+        best_i, best_d = last_idx, float("inf")
+        for i in range(last_idx, len(coords)):
+            d = haversine(s["lat"], s["lng"], coords[i][1], coords[i][0])
+            if d < best_d:
+                best_d, best_i = d, i
+        if n == len(route["stops"]) - 1:
+            best_i = len(coords) - 1
+        s["path_index"] = best_i
+        s["dist_along"] = round(cum[best_i], 1)
+        last_idx = best_i
+    route["path"] = {"type": "LineString", "coordinates": coords}
+    route["length_m"] = round(cum[-1], 1)
+    route["path_source"] = "osrm"
+    return route
+
+
+# ---------------------------------------------------------------------------
+# Fares & timetable helpers
+# ---------------------------------------------------------------------------
+FARE_MIN_INR = 10
+FARE_PER_KM_INR = 1.15
+
+
+def fare_for_km(km: float) -> int:
+    raw = km * FARE_PER_KM_INR + 3
+    return int(max(FARE_MIN_INR, math.ceil(raw / 5) * 5))
+
+
+def fmt_hhmm(minutes: float) -> str:
+    m = int(round(minutes)) % (24 * 60)
+    return f"{m // 60:02d}:{m % 60:02d}"
 
 
 class BusState:
@@ -202,7 +247,7 @@ class Engine:
         for bid in [b for b, s in self.buses.items() if s.route_id == route_id]:
             self.buses.pop(bid, None)
 
-    async def load(self, db):
+    async def load(self, db, snap_fn=None):
         self.db = db
         routes = await db.routes.find({"active": True}, {"_id": 0}).to_list(200)
         if not routes:
@@ -212,6 +257,14 @@ class Engine:
                 routes.append(doc)
             logger.info("Seeded %d routes", len(routes))
         for r in routes:
+            if snap_fn and r.get("path_source") != "osrm":
+                try:
+                    coords, snapped = await snap_fn([[s["lng"], s["lat"]] for s in r["stops"]])
+                    apply_road_path(r, coords, snapped)
+                    await db.routes.update_one({"id": r["id"]}, {"$set": {"path": r["path"], "stops": r["stops"], "length_m": r["length_m"], "path_source": "osrm"}})
+                    logger.info("Snapped route %s to roads (%d pts)", r["number"], len(coords))
+                except Exception as exc:
+                    logger.warning("OSRM snap failed for %s: %s", r["number"], exc)
             self.add_route(r, bus_count=3 if len(r["stops"]) >= 5 else 2)
         logger.info("Engine loaded %d routes, %d buses", len(self.routes), len(self.buses))
 
@@ -388,6 +441,127 @@ class Engine:
                 if best is None or d < best["distance_m"]:
                     best = {**s, "route_id": r["id"], "route_number": r["number"], "route_name": r["name"], "route_name_hi": r["name_hi"], "distance_m": round(d)}
         return best
+
+    def find_stop(self, stop_id: str):
+        for r in self.routes.values():
+            for s in r["stops"]:
+                if s["id"] == stop_id:
+                    return r, s
+        return None, None
+
+    def stop_arrivals(self, stop_id: str) -> Optional[dict]:
+        """A stop plus the best ETA of every route serving a stop with the same name."""
+        route, stop = self.find_stop(stop_id)
+        if not stop:
+            return None
+        arrivals = []
+        for r in self.routes.values():
+            for s in r["stops"]:
+                if s["name"].lower() == stop["name"].lower():
+                    etas = self.route_etas(r["id"])
+                    best = next((x["best"] for x in etas["stops"] if x["id"] == s["id"]), None)
+                    arrivals.append({"route_id": r["id"], "route_number": r["number"], "route_name": r["name"], "route_name_hi": r["name_hi"], "color": r["color"], "stop_id": s["id"], "best": best})
+        arrivals.sort(key=lambda a: a["best"]["eta_s"] if a["best"] else 10**9)
+        return {**stop, "route_id": route["id"], "route_number": route["number"], "arrivals": arrivals}
+
+    def segment_travel_s(self, route_id: str, d_from: float, d_to: float) -> float:
+        """Travel time between two distances along a route using learned segment speeds."""
+        ss = self.seg_speed[route_id]
+        stops = self.routes[route_id]["stops"]
+        lo, hi = min(d_from, d_to), max(d_from, d_to)
+        total = 0.0
+        for i in range(len(stops) - 1):
+            a, b = stops[i]["dist_along"], stops[i + 1]["dist_along"]
+            overlap = max(0.0, min(hi, b) - max(lo, a))
+            if overlap > 0:
+                total += overlap / max(2.0, ss[i])
+        return total
+
+    def fare_between(self, route_id: str, from_id: str, to_id: str) -> Optional[dict]:
+        route = self.routes.get(route_id)
+        if not route:
+            return None
+        stops = route["stops"]
+        fi = next((i for i, s in enumerate(stops) if s["id"] == from_id), None)
+        ti = next((i for i, s in enumerate(stops) if s["id"] == to_id), None)
+        if fi is None or ti is None or fi == ti:
+            return None
+        lo, hi = min(fi, ti), max(fi, ti)
+        via = stops[lo + 1:hi]
+        dist_m = abs(stops[ti]["dist_along"] - stops[fi]["dist_along"])
+        travel = self.segment_travel_s(route_id, stops[fi]["dist_along"], stops[ti]["dist_along"]) + DWELL_SECONDS * len(via)
+        # per-stop cumulative times from origin of this trip
+        order = stops[fi:ti + 1] if fi < ti else list(reversed(stops[ti:fi + 1]))
+        legs = []
+        acc = 0.0
+        for k in range(1, len(order)):
+            leg = self.segment_travel_s(route_id, order[k - 1]["dist_along"], order[k]["dist_along"]) + (DWELL_SECONDS if k > 1 else 0)
+            acc += leg
+            legs.append({"stop_id": order[k]["id"], "name": order[k]["name"], "name_hi": order[k]["name_hi"], "eta_from_start_s": int(acc),
+                         "distance_km": round(abs(order[k]["dist_along"] - order[0]["dist_along"]) / 1000, 1),
+                         "fare_inr": fare_for_km(abs(order[k]["dist_along"] - order[0]["dist_along"]) / 1000)})
+        return {
+            "route_id": route_id, "route_number": route["number"], "from": stops[fi], "to": stops[ti],
+            "distance_km": round(dist_m / 1000, 1), "fare_inr": fare_for_km(dist_m / 1000), "travel_s": int(travel),
+            "via": [{"id": s["id"], "name": s["name"], "name_hi": s["name_hi"]} for s in via], "legs": legs,
+            "direction": 1 if fi < ti else -1,
+        }
+
+    def timetable(self, route_id: str, first_min: int = 6 * 60, last_min: int = 20 * 60) -> Optional[dict]:
+        """Printed-style schedule: fixed headway derived from fleet size and route length."""
+        route = self.routes.get(route_id)
+        if not route:
+            return None
+        stops = route["stops"]
+        n_buses = max(1, sum(1 for b in self.buses.values() if b.route_id == route_id))
+        one_way_s = route["length_m"] / DEFAULT_SPEED_MPS + DWELL_SECONDS * max(0, len(stops) - 2)
+        headway = round((2 * one_way_s + 2 * DWELL_SECONDS) / n_buses / 60 / 5) * 5
+        headway = int(min(120, max(20, headway)))
+        # cumulative minutes from origin to each stop (forward)
+        offsets = [0.0]
+        for i in range(1, len(stops)):
+            leg = (stops[i]["dist_along"] - stops[i - 1]["dist_along"]) / DEFAULT_SPEED_MPS + (DWELL_SECONDS if i > 1 else 0)
+            offsets.append(offsets[-1] + leg / 60)
+        back_offsets = [0.0]
+        for i in range(len(stops) - 2, -1, -1):
+            leg = (stops[i + 1]["dist_along"] - stops[i]["dist_along"]) / DEFAULT_SPEED_MPS + (DWELL_SECONDS if i < len(stops) - 2 else 0)
+            back_offsets.append(back_offsets[-1] + leg / 60)
+
+        def trips(offs, start_shift):
+            out, dep, n = [], first_min + start_shift, 1
+            while dep <= last_min:
+                out.append({"trip": n, "times": [fmt_hhmm(dep + o) for o in offs]})
+                dep += headway
+                n += 1
+            return out
+
+        return {
+            "route_id": route_id, "headway_min": headway, "first": fmt_hhmm(first_min), "last": fmt_hhmm(last_min),
+            "one_way_min": int(round(offsets[-1])),
+            "forward": {"from": stops[0]["name"], "from_hi": stops[0]["name_hi"], "to": stops[-1]["name"], "to_hi": stops[-1]["name_hi"],
+                        "stops": [{"id": s["id"], "name": s["name"], "name_hi": s["name_hi"]} for s in stops], "trips": trips(offsets, 0)},
+            "backward": {"from": stops[-1]["name"], "from_hi": stops[-1]["name_hi"], "to": stops[0]["name"], "to_hi": stops[0]["name_hi"],
+                         "stops": [{"id": s["id"], "name": s["name"], "name_hi": s["name_hi"]} for s in reversed(stops)], "trips": trips(back_offsets, headway // 2)},
+            "fares_from_origin": [{"id": s["id"], "name": s["name"], "fare_inr": fare_for_km(s["dist_along"] / 1000) if i else 0} for i, s in enumerate(stops)],
+        }
+
+    def stops_between(self, a: dict, b: dict, corridor_km: float = 3.0) -> List[dict]:
+        """Existing stops lying in the corridor between two points, ordered along the way."""
+        ax, ay, bx, by = a["lng"], a["lat"], b["lng"], b["lat"]
+        dx, dy = bx - ax, by - ay
+        seen = {}
+        for r in self.routes.values():
+            for s in r["stops"]:
+                if s["name"].lower() in seen:
+                    continue
+                t = ((s["lng"] - ax) * dx + (s["lat"] - ay) * dy) / max(1e-9, dx * dx + dy * dy)
+                if not 0.05 < t < 0.95:
+                    continue
+                px, py = ax + t * dx, ay + t * dy
+                d = haversine(s["lat"], s["lng"], py, px)
+                if d <= corridor_km * 1000:
+                    seen[s["name"].lower()] = {"name": s["name"], "name_hi": s["name_hi"], "lat": s["lat"], "lng": s["lng"], "t": t, "offset_m": round(d)}
+        return sorted(seen.values(), key=lambda x: x["t"])
 
     # ---- realtime loop ---------------------------------------------------
     def subscribe(self) -> asyncio.Queue:

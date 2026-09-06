@@ -18,7 +18,7 @@ export function LeafletMap(props: LeafletMapProps) {
   useMapSync(ready, send, props);
 
   return (
-    <View style={[styles.wrap, props.style]} testID={props.testID ?? "leaflet-map"}>
+    <View style={[styles.wrap, props.style ?? styles.fill]} testID={props.testID ?? "leaflet-map"}>
       <WebView
         ref={ref}
         originWhitelist={["*"]}
@@ -46,7 +46,8 @@ export function LeafletMap(props: LeafletMapProps) {
 }
 
 const useStyles = makeStyles((colors) => ({
-  wrap: { flex: 1, backgroundColor: colors.surfaceTertiary, overflow: "hidden" },
+  wrap: { backgroundColor: colors.surfaceTertiary, overflow: "hidden" },
+  fill: { flex: 1 },
   web: { flex: 1, backgroundColor: colors.surfaceTertiary },
   loading: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0, alignItems: "center", justifyContent: "center" },
 }));

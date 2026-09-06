@@ -9,6 +9,7 @@ import { KeyboardProvider } from "react-native-keyboard-controller";
 import { ErrorBoundary } from "@/src/components/error-boundary";
 import { OfflineBanner } from "@/src/components/OfflineBanner";
 import { ToastProvider } from "@/src/components/Toast";
+import { FavoritesProvider } from "@/src/favorites/FavoritesContext";
 import { LanguageProvider } from "@/src/i18n/LanguageContext";
 import { LiveProvider } from "@/src/live/LiveContext";
 import { queryClient } from "@/src/query-client";
@@ -34,6 +35,7 @@ export default function RootLayout() {
           <QueryClientProvider client={queryClient}>
             <LanguageProvider>
               <LiveProvider>
+                <FavoritesProvider>
                 <ToastProvider>
                   <View style={{ flex: 1, backgroundColor: colors.surface }}>
                     <StatusBar style="dark" />
@@ -41,11 +43,14 @@ export default function RootLayout() {
                       <Stack.Screen name="index" />
                       <Stack.Screen name="(tabs)" />
                       <Stack.Screen name="route/[id]" />
+                      <Stack.Screen name="timetable/[id]" />
+                      <Stack.Screen name="suggest" />
                       <Stack.Screen name="admin" />
                     </Stack>
                     <OfflineBanner />
                   </View>
                 </ToastProvider>
+                </FavoritesProvider>
               </LiveProvider>
             </LanguageProvider>
           </QueryClientProvider>

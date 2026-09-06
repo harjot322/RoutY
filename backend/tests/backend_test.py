@@ -249,3 +249,225 @@ class TestWebsocket:
                 data2 = json.loads(msg2)
                 assert "ts" in data2
         asyncio.run(run())
+
+
+# ------------------------------- Iteration 2: OSRM path & new endpoints
+class TestIter2Routes:
+    """Verify OSRM road geometry + stop path_index/dist_along."""
+
+    def test_routes_have_osrm_path(self, s):
+        routes = s.get(f"{BASE_URL}/api/routes").json()
+        assert len(routes) >= 4
+        osrm_ok = 0
+        for r in routes:
+            src = r.get("path_source")
+            coords = r.get("path", {}).get("coordinates", [])
+            assert src in ("osrm", "straight"), f"unexpected path_source {src}"
+            if src == "osrm":
+                osrm_ok += 1
+                assert len(coords) > 100, f"route {r['number']} OSRM path only {len(coords)} pts"
+            # stops should be ordered along the polyline
+            prev_idx, prev_dist = -1, -0.001
+            for st in r["stops"]:
+                assert "path_index" in st and "dist_along" in st
+                assert st["path_index"] >= prev_idx
+                assert st["dist_along"] >= prev_dist - 1e-6
+                prev_idx, prev_dist = st["path_index"], st["dist_along"]
+        # At least the seeded R1-R4 should have real roads (best-effort)
+        assert osrm_ok >= 1, "No OSRM routes at all (public OSRM down?)"
+
+
+class TestIter2Timetable:
+    def test_timetable_shape(self, s):
+        routes = s.get(f"{BASE_URL}/api/routes").json()
+        rid = next(r["id"] for r in routes if r["number"] == "R2")
+        r = s.get(f"{BASE_URL}/api/routes/{rid}/timetable")
+        assert r.status_code == 200, r.text
+        d = r.json()
+        # API uses keys "first"/"last"
+        assert d.get("first") == "06:00"
+        assert d.get("last") == "20:00"
+        assert isinstance(d.get("headway_min"), (int, float)) and d["headway_min"] > 0
+        assert "fares_from_origin" in d and isinstance(d["fares_from_origin"], list)
+        # stop count for direction toggle
+        stops_len = len(d["forward"]["stops"])
+        assert stops_len >= 2
+        assert len(d["forward"]["trips"]) >= 1
+        for trip in d["forward"]["trips"]:
+            assert len(trip["times"]) == stops_len
+            # time format HH:MM
+            for tm in trip["times"]:
+                assert len(tm) == 5 and tm[2] == ":"
+        assert "backward" in d and len(d["backward"]["stops"]) == stops_len
+
+    def test_timetable_404(self, s):
+        r = s.get(f"{BASE_URL}/api/routes/does-not-exist/timetable")
+        assert r.status_code == 404
+
+
+class TestIter2Fare:
+    def test_fare_between_stops(self, s):
+        routes = s.get(f"{BASE_URL}/api/routes").json()
+        r2 = next(r for r in routes if r["number"] == "R2")
+        rid = r2["id"]
+        f_id = r2["stops"][0]["id"]
+        t_id = r2["stops"][-1]["id"]
+        r = s.get(f"{BASE_URL}/api/routes/{rid}/fare", params={"from_stop": f_id, "to_stop": t_id})
+        assert r.status_code == 200, r.text
+        d = r.json()
+        assert d["fare_inr"] >= 10
+        assert d["distance_km"] > 0
+        assert d["travel_s"] > 0
+        assert isinstance(d.get("via"), list)
+        assert "legs" in d and len(d["legs"]) >= 2
+        # legs cumulative eta increasing
+        prev = -1
+        for leg in d["legs"]:
+            assert "eta_from_start_s" in leg
+            assert leg["eta_from_start_s"] >= prev
+            prev = leg["eta_from_start_s"]
+
+    def test_fare_reversed(self, s):
+        routes = s.get(f"{BASE_URL}/api/routes").json()
+        r2 = next(r for r in routes if r["number"] == "R2")
+        rid = r2["id"]
+        r = s.get(f"{BASE_URL}/api/routes/{rid}/fare",
+                  params={"from_stop": r2["stops"][-1]["id"], "to_stop": r2["stops"][0]["id"]})
+        assert r.status_code == 200
+        assert r.json()["fare_inr"] >= 10
+
+    def test_fare_same_stop(self, s):
+        routes = s.get(f"{BASE_URL}/api/routes").json()
+        r2 = next(r for r in routes if r["number"] == "R2")
+        sid = r2["stops"][0]["id"]
+        r = s.get(f"{BASE_URL}/api/routes/{r2['id']}/fare", params={"from_stop": sid, "to_stop": sid})
+        assert r.status_code == 404
+
+
+class TestIter2Search:
+    def test_search_returns_fare_and_via(self, s):
+        r = s.post(f"{BASE_URL}/api/search",
+                   json={"from_text": "Barabanki", "to_text": "Haidergarh"})
+        assert r.status_code == 200
+        d = r.json()
+        assert d["unserved"] is False and len(d["results"]) >= 1
+        res = next(x for x in d["results"] if x["number"] == "R2")
+        assert res["fare_inr"] and res["fare_inr"] >= 10
+        assert res["distance_km"] > 0
+        assert res["travel_s"] > 0
+        assert isinstance(res.get("via"), list) and len(res["via"]) == 4
+        assert isinstance(res.get("legs"), list) and len(res["legs"]) >= 2
+
+
+class TestIter2Stops:
+    def test_stop_arrivals(self, s):
+        routes = s.get(f"{BASE_URL}/api/routes").json()
+        # Barabanki Bus Stand should be present on R1-R4
+        target = None
+        for r in routes:
+            for st in r["stops"]:
+                if "barabanki bus stand" in st["name"].lower():
+                    target = st["id"]
+                    break
+            if target:
+                break
+        assert target, "Barabanki Bus Stand seed stop not found"
+        r = s.get(f"{BASE_URL}/api/stops/{target}")
+        assert r.status_code == 200
+        d = r.json()
+        assert "arrivals" in d and isinstance(d["arrivals"], list)
+        # arrivals grouped by route; expect >=1 (ideally 4 sharing this stop name)
+        assert len(d["arrivals"]) >= 1
+        # Each arrival entry should have route info + eta
+        for a in d["arrivals"]:
+            assert "route_id" in a and ("number" in a or "route_number" in a)
+
+    def test_stop_unknown_404(self, s):
+        r = s.get(f"{BASE_URL}/api/stops/does-not-exist-stop")
+        assert r.status_code == 404
+
+
+class TestIter2Suggestions:
+    def test_suggestion_flow(self, s, auth_headers):
+        body = {
+            "from_text": "TEST_FromVillage",
+            "to_text": "TEST_ToTown",
+            "village": "TEST_Village",
+            "notes": "Please add bus",
+            "contact": "9999999999",
+            "lat": 26.93,
+            "lng": 81.19,
+        }
+        r = s.post(f"{BASE_URL}/api/suggestions", json=body)
+        assert r.status_code == 200, r.text
+        d = r.json()
+        assert d["status"] == "new"
+        sid = d["id"]
+
+        # Admin list
+        r2 = s.get(f"{BASE_URL}/api/admin/suggestions", headers=auth_headers)
+        assert r2.status_code == 200
+        assert any(x["id"] == sid for x in r2.json())
+
+        # Admin overview has suggestions_new count
+        ov = s.get(f"{BASE_URL}/api/admin/overview", headers=auth_headers).json()
+        assert "suggestions_new" in ov and ov["suggestions_new"] >= 1
+
+        # Approve
+        r3 = s.post(f"{BASE_URL}/api/admin/suggestions/{sid}/status",
+                    json={"status": "approved"}, headers=auth_headers)
+        assert r3.status_code == 200
+        # verify
+        after = s.get(f"{BASE_URL}/api/admin/suggestions", headers=auth_headers).json()
+        assert next(x for x in after if x["id"] == sid)["status"] == "approved"
+
+        # Invalid status
+        r4 = s.post(f"{BASE_URL}/api/admin/suggestions/{sid}/status",
+                    json={"status": "bogus"}, headers=auth_headers)
+        assert r4.status_code == 422
+
+    def test_suggestions_unauth(self, s):
+        r = s.get(f"{BASE_URL}/api/admin/suggestions")
+        assert r.status_code == 401
+
+
+class TestIter2AdminFindStops:
+    def test_find_stops_between(self, s, auth_headers):
+        r = s.post(f"{BASE_URL}/api/admin/routes/find-stops",
+                   json={"from_point": {"lat": 26.926, "lng": 81.19},
+                         "to_point": {"lat": 26.60, "lng": 81.36}},
+                   headers=auth_headers)
+        assert r.status_code == 200, r.text
+        d = r.json()
+        assert "stops" in d and isinstance(d["stops"], list)
+        names = " ".join([s2["name"].lower() for s2 in d["stops"]])
+        # At least one of the expected intermediates should appear
+        assert any(k in names for k in ["banki", "zaidpur", "siddhaur", "trivediganj"]), names
+        # Ordered along corridor (t increasing)
+        ts = [s2.get("t") for s2 in d["stops"] if s2.get("t") is not None]
+        assert ts == sorted(ts)
+
+    def test_create_route_with_osrm(self, s, auth_headers):
+        payload = {
+            "number": f"TR{uuid.uuid4().hex[:4].upper()}",
+            "name": "TEST_Iter2_Route",
+            "name_hi": "टेस्ट",
+            "color": "#00AA55",
+            "stops": [
+                {"name": "TEST_Barabanki", "name_hi": "बाराबंकी", "lat": 26.926, "lng": 81.19},
+                {"name": "TEST_Dewa", "name_hi": "देवा", "lat": 27.04, "lng": 81.17},
+            ],
+            "bus_count": 1,
+        }
+        r = s.post(f"{BASE_URL}/api/admin/routes", json=payload, headers=auth_headers)
+        assert r.status_code == 200, r.text
+        route = r.json()
+        rid = route["id"]
+        assert route.get("path_source") in ("osrm", "straight")
+        # Appears in public list
+        pub = s.get(f"{BASE_URL}/api/routes").json()
+        assert any(x["id"] == rid for x in pub)
+        # cleanup
+        r2 = s.delete(f"{BASE_URL}/api/admin/routes/{rid}", headers=auth_headers)
+        assert r2.status_code == 200
+

@@ -1,0 +1,40 @@
+{
+  "summary": "Iteration-2 regression complete. Backend: 31/31 pytest cases pass (11 iter-2 new + 20 iter-1 regression) against public EXPO_PUBLIC_BACKEND_URL. Verified: /api/routes have path_source='osrm' with 200+ coordinate polylines and stops with monotonically-increasing path_index/dist_along; /api/routes/{id}/timetable returns first=06:00, last=20:00, headway_min>0, forward/backward directions with stops×trips grid + fares_from_origin; /api/routes/{id}/fare validates fare_inr>=10, distance_km, travel_s, via[], legs[] with cumulative eta_from_start_s, reversed direction works, same-stop -> 404; /api/search 'Barabanki'->'Haidergarh' returns R2 with fare_inr=70, distance_km=56.6, travel_s>0, via len=4, legs; /api/stops/{stop_id} returns arrivals list for shared-name stops (Barabanki Bus Stand present on R1-R4); /api/suggestions create->admin list->approve flow works, invalid status -> 422, unauth -> 401, /api/admin/overview surfaces suggestions_new; /api/admin/routes/find-stops returns intermediates (Banki/Zaidpur/Siddhaur/Trivediganj) ordered by t; POST /api/admin/routes with OSRM snapping succeeds (path_source=osrm|straight fallback) and DELETE soft-removes. Fixed 1 backend bug during testing (see rca_of_issue). Frontend (390x844 mobile viewport): Map tab loads with live buses+SOS; Routes tab lists R1-R4 with bus_count; Route detail shows a Leaflet MAP iframe above 'Timetable' + 'Fare & time' pill buttons, 6 stops with ETAs (34/12/33/58/17/38 min) and a '⋯' action per row; StopActionSheet opens with Track / Announce / Share ETA / Fare & time / Save as favourite; Save-as-favourite -> Home/Market/Other picker -> star ⭐ appears next to the stop; Timetable screen renders a printed-style grid (stops rows × Bus 1..N columns, HH:MM times), direction toggle chips, and 'Fare · Barabanki Bus Stand →' collapsible with ₹15/₹25/₹40/... list; Fare & time modal opens with BOARD-AT and GET-OFF-AT horizontal chip rows; Map favourite chips row renders 'Nearest stop' + saved favourite (stop-name label, e.g. 'Zaidpur Market' with home icon); Search 'Barabanki'->'Haidergarh' shows result card 'R2 · ₹70 · 141 min · 56.6 km · Via 4 stops: Banki Chauraha · Zaidpur Market · Siddhaur · Trivediganj' with no text overflow at 390px; Suggest-a-route form has From/To/Village/Notes/Contact/Attach-my-location/Send-request, typing retains focus (no remount), submit shows success toast 'Thank you! Your request reached the transport office.'; Admin login (admin/RoutYAdmin2026Secure) -> Control room shows 'Route requests' stat tile; /admin/suggestions lists prior submissions with New/Reviewed/Rejected status buttons and Approved badge. No deprecated Expo packages (no expo-av/expo-barcode-scanner/expo-background-fetch). No React Native red screen. Only console noise: legacy shadow*/pointerEvents warnings (framework-level) and one dev-only 'GO_BACK not handled' warning when /suggest is opened via deep-link.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "suggest.tsx", "issue": "After Send request success, code calls router.back() which throws 'The action GO_BACK was not handled by any navigator' when the page was opened via deep-link/direct URL (no navigation history). The success toast still shows but the user is stranded on the form. Suggest using router.replace('/settings') or router.canGoBack() guard.", "testID": "suggest-send-request", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/backend_test.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [
+    "Confirm my 1-line backend fix in server.py: reordered /api/stops/nearest to be declared BEFORE /api/stops/{stop_id} — otherwise FastAPI matched 'nearest' as the {stop_id} path param and returned 404 (Map tab's Use-my-location -> nearest stop was broken). See rca_of_issue.",
+    "Optional: in /app/frontend/app/suggest.tsx replace router.back() after submit with router.canGoBack() ? router.back() : router.replace('/settings') to avoid GO_BACK warning on deep-link opens."
+  ],
+  "critical_code_review_comments": [
+    "Route ordering matters in FastAPI: dynamic path params like /stops/{stop_id} must always come AFTER any literal sibling routes like /stops/nearest. This was the sole regression introduced in iter-2.",
+    "server.py excludes MongoDB _id in all reads (verified) and uses env vars for all URLs/creds.",
+    "OSRM fallback path in POST /api/admin/routes is correct — sets path_source='straight' if osrm_snap raises, which is desirable when the free OSRM server is briefly unreachable.",
+    "Frontend api.ts consistently uses process.env.EXPO_PUBLIC_BACKEND_URL; no hardcoded URLs found.",
+    "testIDs present on tab bar and key interactive elements. Suggest form fields are accessible by placeholder text; adding testIDs (from-input, to-input, submit-request) would make automated testing more robust."
+  ],
+  "updated_files": [
+    "/app/backend/server.py (reordered /api/stops/nearest before /api/stops/{stop_id})",
+    "/app/backend/tests/backend_test.py (added 11 iter-2 test cases in classes TestIter2Routes/Timetable/Fare/Search/Stops/Suggestions/AdminFindStops)"
+  ],
+  "success_rate": {"backend": "100% (31/31)", "frontend": "100% of tested flows"},
+  "seed_data_creation": "Created 1 admin route via POST /api/admin/routes (TEST_Iter2_Route) and DELETE-cleaned it. Left 4 suggestions in db (3 TEST_FromVillage from pytest suggestion flow + 1 TEST_FromUI_iter2X from UI test) — all approved/for-review, they surface in /admin/suggestions and drive the Route-requests stat but do not affect user-facing flows.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Run `pytest /app/backend/tests/backend_test.py -v` to re-run 31 backend cases (uses EXPO_PUBLIC_BACKEND_URL). Iter-2 features are covered by TestIter2* classes. For UI regression, key flows to hit at 390x844: (1) Routes > R2 > tap stop row -> action sheet -> Save as favourite -> Home; (2) Timetable button opens printed grid; (3) Fare & time modal opens with Board-at/Get-off-at chips; (4) Map tab shows Nearest stop + saved-favourite chip row; (5) Search 'Barabanki'/'Haidergarh' shows ₹/min/km/'Via 4 stops:' card; (6) Settings > Suggest a route form focus is retained and submit toasts.",
+  "rca_of_issue": "BUG: GET /api/stops/nearest?lat=..&lng=.. returned 404 'Stop not found' after iter-2 changes. ROOT CAUSE: server.py declared @api.get('/stops/{stop_id}') at line 183 BEFORE @api.get('/stops/nearest') at line 211. FastAPI matches routes in declaration order, so the literal path 'nearest' was captured as the {stop_id} path parameter, and engine.stop_arrivals('nearest') returned None -> HTTPException 404. This broke the Map tab's 'Use my location -> nearest stop' feature. REPRO: curl 'https://<host>/api/stops/nearest?lat=26.93&lng=81.19' -> 404 before fix. FIX: moved the /stops/nearest handler above /stops/{stop_id} in server.py; restarted supervisor 'backend'. Verified curl now returns the Barabanki Bus Stand doc with route metadata. All 31 pytest cases pass post-fix. This is the only backend regression from iter-2."
+}

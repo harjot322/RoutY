@@ -85,7 +85,60 @@ export type SearchResult = {
   from_stop: Stop;
   to_stop: Stop;
   stops_between: number;
+  fare_inr: number | null;
+  distance_km: number | null;
+  travel_s: number | null;
+  via: { id: string; name: string; name_hi: string }[];
+  legs: FareLeg[];
 };
+
+export type FareLeg = { stop_id: string; name: string; name_hi: string; eta_from_start_s: number; distance_km: number; fare_inr: number };
+
+export type FareInfo = {
+  route_id: string;
+  route_number: string;
+  from: Stop;
+  to: Stop;
+  distance_km: number;
+  fare_inr: number;
+  travel_s: number;
+  via: { id: string; name: string; name_hi: string }[];
+  legs: FareLeg[];
+  direction: number;
+};
+
+export type TimetableDir = { from: string; from_hi: string; to: string; to_hi: string; stops: { id: string; name: string; name_hi: string }[]; trips: { trip: number; times: string[] }[] };
+export type Timetable = {
+  route_id: string;
+  headway_min: number;
+  first: string;
+  last: string;
+  one_way_min: number;
+  forward: TimetableDir;
+  backward: TimetableDir;
+  fares_from_origin: { id: string; name: string; fare_inr: number }[];
+};
+
+export type StopArrivals = Stop & {
+  route_id: string;
+  route_number: string;
+  arrivals: { route_id: string; route_number: string; route_name: string; route_name_hi: string; color: string; stop_id: string; best: BestEta }[];
+};
+
+export type Suggestion = {
+  id: string;
+  from_text: string;
+  to_text: string;
+  village: string;
+  notes: string;
+  contact: string;
+  lat: number | null;
+  lng: number | null;
+  status: "new" | "reviewed" | "approved" | "rejected";
+  created_at: string;
+};
+
+export type CorridorStop = { name: string; name_hi: string; lat: number; lng: number; t: number; offset_m: number };
 
 export type Sos = {
   id: string;
@@ -108,6 +161,7 @@ export type Overview = {
   bunching: Bunching[];
   sos: Sos[];
   demand_count: number;
+  suggestions_new: number;
   live: Bus[];
   ts: string;
 };
@@ -143,6 +197,11 @@ async function request<T>(path: string, init: RequestInit = {}, withAuth = false
 export const api = {
   routes: () => request<Route[]>("/routes"),
   route: (id: string) => request<RouteDetail>(`/routes/${id}`),
+  timetable: (id: string) => request<Timetable>(`/routes/${id}/timetable`),
+  fare: (id: string, fromStop: string, toStop: string) => request<FareInfo>(`/routes/${id}/fare?from_stop=${fromStop}&to_stop=${toStop}`),
+  stop: (stopId: string) => request<StopArrivals>(`/stops/${stopId}`),
+  suggest: (body: { from_text: string; to_text: string; village?: string; notes?: string; contact?: string; lat?: number; lng?: number }) =>
+    request<Suggestion>("/suggestions", { method: "POST", body: JSON.stringify(body) }),
   live: () => request<LiveSnapshot>("/live"),
   bus: (id: string) => request<Bus>(`/buses/${id}`),
   nearestStop: (lat: number, lng: number) => request<NearestStop>(`/stops/nearest?lat=${lat}&lng=${lng}`),
@@ -187,6 +246,11 @@ export const api = {
     history: (busId: string, minutes: number) =>
       request<{ bus_id: string; points: HistoryPoint[] }>(`/admin/buses/${busId}/history?minutes=${minutes}`, {}, true),
     demand: () => request<Demand>("/admin/demand", {}, true),
+    suggestions: () => request<Suggestion[]>("/admin/suggestions", {}, true),
+    setSuggestionStatus: (id: string, status: Suggestion["status"]) =>
+      request<{ ok: boolean }>(`/admin/suggestions/${id}/status`, { method: "POST", body: JSON.stringify({ status }) }, true),
+    findStops: (from_point: { lat: number; lng: number }, to_point: { lat: number; lng: number }) =>
+      request<{ stops: CorridorStop[] }>("/admin/routes/find-stops", { method: "POST", body: JSON.stringify({ from_point, to_point }) }, true),
   },
 };
 

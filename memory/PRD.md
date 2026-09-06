@@ -27,14 +27,15 @@ Backend: simulation engine (Faker) moving buses along GeoJSON routes, ETA engine
 
 ## Implemented (2026-06)
 - Simulation of 4 routes / 10 buses, WS realtime + polling fallback, offline "Reconnecting…" banner with last-known ETAs
-- Map: animated bus markers, stops, user location (permission flow w/ Open Settings), nearest stop + next bus ETA, Catchability (Walk/Run/Wait), Track bus, SOS sheet, EN/HI toggle, live status pill
-- Search From→To with village chips; unserved searches logged as demand
-- Routes list + search; Route detail with per-stop live ETA countdown, announce (voice) and track
-- Settings: language, voice toggle + test, admin access
-- Admin: login, dashboard (stats, live map w/ red SOS buses, SOS resolve, bunching warnings), routes CRUD (create/soft-delete/add bus), replay slider, demand heatmap
+- **Real road geometry via OSRM** (free routing API) for all routes; admin-created routes are snapped to roads too
+- Map: animated bus markers, stops, user location (permission flow w/ Open Settings), nearest stop + next bus ETA, Catchability (Walk/Run/Wait), Track bus, SOS sheet, EN/HI toggle, live status pill, share ETA, **favourite-stop chips (Home/Market/Other) with arrivals per route**
+- Search From→To with village chips, **fare / travel time / distance / via-stops per result**; unserved searches logged as demand; "Suggest a route" from empty state
+- Routes list + search; Route detail with per-stop live ETA countdown, **stop action sheet (track, announce, share, favourite, fare)**, **Fare & time calculator with stop-by-stop legs**, **printed-style Timetable** (grid + direction toggle + fares)
+- Settings: language, voice toggle + test, **Suggest a route** form, admin access
+- Admin: login, dashboard (stats incl. route requests, live map w/ red SOS buses, SOS resolve, bunching warnings), routes CRUD (create/soft-delete/add bus, **find existing stops between endpoints**), replay slider, demand heatmap, **route-request review (new/reviewed/approved/rejected)**
 - Translation endpoint /api/translate (MyMemory, cached)
 
 ## Backlog
-- P1: Schedules/timetables per route; favourites; share ETA
+- P1: Schedules editable by admin; favourites sync; export timetable as image/PDF
 - P1: Demand heatmap using proper heat layer; export CSV
 - P2: Dark mode; push notifications (needs google-services.json); driver app

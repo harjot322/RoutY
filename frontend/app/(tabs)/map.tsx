@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import * as Haptics from "expo-haptics";
 import { useRouter } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Modal, Platform, Pressable, Text, View } from "react-native";
+import { Modal, Platform, Pressable, ScrollView, Text, View } from "react-native";
 import Animated, { FadeInDown } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -14,11 +14,13 @@ import { LeafletMap } from "@/src/components/LeafletMap";
 import { MapBus, MapRoute } from "@/src/components/leafletHtml";
 import { SearchModal } from "@/src/components/SearchModal";
 import { useToast } from "@/src/components/Toast";
+import { FAV_ICONS, useFavourites } from "@/src/favorites/FavoritesContext";
 import { useUserLocation } from "@/src/hooks/useUserLocation";
 import { useLanguage } from "@/src/i18n/LanguageContext";
 import { useLive } from "@/src/live/LiveContext";
 import { makeStyles, useTheme } from "@/src/theme";
 import { fmtDistance, haversineM } from "@/src/utils/geo";
+import { shareMessage } from "@/src/utils/share";
 import { announce } from "@/src/utils/speech";
 
 export default function MapScreen() {
@@ -34,7 +36,12 @@ export default function MapScreen() {
   const [sosOpen, setSosOpen] = useState(false);
   const [sosSending, setSosSending] = useState(false);
   const [focus, setFocus] = useState<{ lat: number; lng: number; zoom?: number } | null>(null);
+  const [favId, setFavId] = useState<string | null>(null);
+  const { favourites } = useFavourites();
   const alerted = useRef<Set<string>>(new Set());
+
+  const favQ = useQuery({ queryKey: ["stop", favId], queryFn: () => api.stop(favId as string), enabled: !!favId, refetchInterval: 5000, retry: 0 });
+  const favStop = favId ? favQ.data ?? null : null;
 
   const routesQ = useQuery({ queryKey: ["routes"], queryFn: api.routes, staleTime: 60000 });
   const coords = loc.coords;
@@ -121,6 +128,14 @@ export default function MapScreen() {
     const m = Math.round(etaForStop / 60);
     announce(m < 1 ? t("announcementNow", { r, s }) : t("announcement", { r, m, s }), lang);
   };
+  const shareEta = () => {
+    if (!nearest || etaForStop == null) return;
+    const r = trackedBus?.route_number ?? nearest.route_number;
+    const term = trackedBus ? tr(trackedBus.terminus, trackedBus.terminus_hi) : nearest.best ? tr(nearest.best.terminus, nearest.best.terminus_hi) : "";
+    shareMessage(t("shareText", { r, s: tr(nearest.name, nearest.name_hi), m: Math.max(1, Math.round(etaForStop / 60)), t: term }));
+  };
+  const favDist = favStop && coords ? haversineM(coords.lat, coords.lng, favStop.lat, favStop.lng) : null;
+  const favBest = favStop?.arrivals.find((a) => a.best)?.best ?? null;
 
   return (
     <View style={styles.root} testID="map-screen">
@@ -169,13 +184,55 @@ export default function MapScreen() {
           </Pressable>
         </View>
 
+        {favourites.length > 0 && (
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.favRow} contentContainerStyle={styles.favChips} testID="favourite-chips">
+            <Pressable style={[styles.favChip, !favId && styles.favChipActive]} onPress={() => setFavId(null)} testID="fav-chip-nearest">
+              <Icon name="crosshairs-gps" size={18} color={!favId ? colors.onBrandPrimary : colors.onSurface} />
+              <Text style={[styles.favChipText, !favId && { color: colors.onBrandPrimary }]}>{t("nearestStop")}</Text>
+            </Pressable>
+            {favourites.map((f) => {
+              const active = favId === f.stop_id;
+              return (
+                <Pressable key={f.stop_id} style={[styles.favChip, active && styles.favChipActive]} onPress={() => setFavId(active ? null : f.stop_id)} testID={`fav-chip-${f.stop_id}`}>
+                  <Icon name={FAV_ICONS[f.label]} size={18} color={active ? colors.onBrandPrimary : colors.brandPrimary} />
+                  <Text style={[styles.favChipText, active && { color: colors.onBrandPrimary }]} numberOfLines={1}>{tr(f.name, f.name_hi)}</Text>
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+        )}
+
         <Animated.View entering={FadeInDown} style={styles.card} testID="map-bottom-card">
-          {trackedBus ? (
+          {favStop ? (
+            <View style={{ gap: 12 }} testID="favourite-stop-card">
+              <View style={styles.rowCenter}>
+                <Icon name="star" size={28} color={colors.warning} />
+                <View style={{ flex: 1, minWidth: 0 }}>
+                  <Text style={styles.label}>{t("favourites")}</Text>
+                  <Text style={styles.stopName} numberOfLines={1}>{tr(favStop.name, favStop.name_hi)}</Text>
+                  {favDist != null && <Text style={styles.cardSub}>{t("away", { d: fmtDistance(favDist, lang) })}</Text>}
+                </View>
+                <Pressable style={styles.iconBtn} onPress={() => setFocus({ lat: favStop.lat, lng: favStop.lng, zoom: 14 })} testID="fav-focus-button">
+                  <Icon name="map-search-outline" size={26} color={colors.onSurface} />
+                </Pressable>
+              </View>
+              {favStop.arrivals.slice(0, 3).map((a) => (
+                <Pressable key={a.stop_id} style={styles.arrivalRow} onPress={() => router.push(`/route/${a.route_id}`)} testID={`fav-arrival-${a.route_number}`}>
+                  <View style={[styles.routeBadge, { width: 44, height: 44, backgroundColor: a.color }]}>
+                    <Text style={styles.routeBadgeText}>{a.route_number}</Text>
+                  </View>
+                  <Text style={styles.arrivalName} numberOfLines={1}>{tr(a.route_name, a.route_name_hi)}</Text>
+                  <Text style={[styles.eta, { fontSize: 20 }]}>{a.best ? fmtEta(a.best.eta_s, lang) : "—"}</Text>
+                </Pressable>
+              ))}
+              {favBest && favDist != null && <CatchabilityCard distanceM={favDist} etaS={favBest.eta_s} />}
+            </View>
+          ) : trackedBus ? (
             <View style={styles.cardHead}>
               <View style={[styles.routeBadge, { backgroundColor: trackedBus.color }]}>
                 <Text style={styles.routeBadgeText}>{trackedBus.route_number}</Text>
               </View>
-              <View style={{ flex: 1 }}>
+              <View style={{ flex: 1, minWidth: 0 }}>
                 <Text style={styles.cardTitle} numberOfLines={1}>{t("tracking")} · {trackedBus.plate}</Text>
                 <Text style={styles.cardSub} numberOfLines={1}>
                   {t("toward", { t: tr(trackedBus.terminus, trackedBus.terminus_hi) })}
@@ -188,7 +245,7 @@ export default function MapScreen() {
             </View>
           ) : null}
 
-          {loc.status !== "granted" ? (
+          {favStop ? null : loc.status !== "granted" ? (
             <View style={{ gap: 12 }}>
               <View style={styles.rowCenter}>
                 <Icon name="map-marker-radius" size={28} color={colors.brandPrimary} />
@@ -206,26 +263,31 @@ export default function MapScreen() {
             <View style={{ gap: 12 }}>
               <View style={styles.rowCenter}>
                 <Icon name="bus-stop" size={28} color={colors.brandPrimary} />
-                <View style={{ flex: 1 }}>
+                <View style={{ flex: 1, minWidth: 0 }}>
                   <Text style={styles.label}>{t("nearestStop")}</Text>
                   <Text style={styles.stopName} numberOfLines={1} testID="nearest-stop-name">{tr(nearest.name, nearest.name_hi)}</Text>
                   {distToStop != null && <Text style={styles.cardSub}>{t("away", { d: fmtDistance(distToStop, lang) })}</Text>}
                 </View>
-                <View style={{ alignItems: "flex-end" }}>
+                <View style={styles.etaCol}>
                   <Text style={styles.label}>{t("nextBus")}</Text>
                   <Text style={styles.eta} testID="nearest-stop-eta">{etaForStop != null ? fmtEta(etaForStop, lang) : "—"}</Text>
-                  {etaForStop == null && <Text style={styles.cardSub}>{t("noBusSoon")}</Text>}
+                  {etaForStop == null && <Text style={[styles.cardSub, { textAlign: "right" }]} numberOfLines={2}>{t("noBusSoon")}</Text>}
                 </View>
               </View>
               {etaForStop != null && distToStop != null && <CatchabilityCard distanceM={distToStop} etaS={etaForStop} />}
               <View style={styles.actions}>
                 {!trackedBus && nearest.best && (
-                  <BigButton testID="track-nearest-bus-button" label={`${t("track")} ${nearest.route_number}`} icon="bus-marker" onPress={() => setTrackedBusId(nearest.best!.bus_id)} style={{ flex: 1 }} />
+                  <BigButton testID="track-nearest-bus-button" label={`${t("track")} ${nearest.route_number}`} icon="bus-marker" onPress={() => setTrackedBusId(nearest.best!.bus_id)} style={{ flex: 1, minWidth: 0 }} />
                 )}
                 {etaForStop != null && (
-                  <Pressable style={styles.speakBtn} onPress={speakEta} testID="announce-eta-button">
-                    <Icon name="volume-high" size={26} color={colors.onBrandSecondary} />
-                  </Pressable>
+                  <>
+                    <Pressable style={styles.speakBtn} onPress={speakEta} testID="announce-eta-button">
+                      <Icon name="volume-high" size={26} color={colors.onBrandSecondary} />
+                    </Pressable>
+                    <Pressable style={styles.speakBtn} onPress={shareEta} testID="share-eta-button">
+                      <Icon name="share-variant" size={26} color={colors.onBrandSecondary} />
+                    </Pressable>
+                  </>
                 )}
               </View>
             </View>
@@ -293,18 +355,26 @@ const useStyles = makeStyles((colors) => ({
   sosText: { color: colors.onError, fontWeight: "900", fontSize: 14, marginTop: -2 },
   card: { backgroundColor: colors.surface, borderRadius: 16, padding: 16, gap: 12, borderWidth: 1, borderColor: colors.border, elevation: 6, shadowColor: colors.borderStrong, shadowOpacity: 0.15, shadowRadius: 10, shadowOffset: { width: 0, height: 4 } },
   cardHead: { flexDirection: "row", alignItems: "center", gap: 12, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: colors.divider },
-  routeBadge: { width: 48, height: 48, borderRadius: 12, alignItems: "center", justifyContent: "center" },
+  routeBadge: { width: 48, height: 48, borderRadius: 12, alignItems: "center", justifyContent: "center", flexShrink: 0 },
   routeBadgeText: { color: colors.onBrand, fontWeight: "800", fontSize: 15 },
   cardTitle: { fontSize: 16, fontWeight: "800", color: colors.onSurface },
   cardSub: { fontSize: 13, color: colors.muted, marginTop: 2 },
-  iconBtn: { width: 44, height: 44, alignItems: "center", justifyContent: "center" },
+  iconBtn: { width: 44, height: 44, alignItems: "center", justifyContent: "center", flexShrink: 0 },
   rowCenter: { flexDirection: "row", alignItems: "center", gap: 12 },
+  etaCol: { alignItems: "flex-end", maxWidth: "42%", flexShrink: 0 },
   label: { fontSize: 12, color: colors.muted, fontWeight: "700", textTransform: "uppercase" },
   stopName: { fontSize: 18, fontWeight: "800", color: colors.onSurface },
   eta: { fontSize: 24, fontWeight: "900", color: colors.brandPrimary },
   hint: { flex: 1, fontSize: 15, color: colors.onSurfaceSecondary, lineHeight: 21 },
   actions: { flexDirection: "row", gap: 12 },
-  speakBtn: { width: 56, height: 56, borderRadius: 12, backgroundColor: colors.brandSecondary, alignItems: "center", justifyContent: "center" },
+  speakBtn: { width: 56, height: 56, borderRadius: 12, backgroundColor: colors.brandSecondary, alignItems: "center", justifyContent: "center", flexShrink: 0 },
+  favRow: { height: 48, flexGrow: 0 },
+  favChips: { gap: 8, alignItems: "center", paddingRight: 8 },
+  favChip: { height: 40, maxWidth: 200, paddingHorizontal: 12, borderRadius: 999, backgroundColor: colors.surface, borderWidth: 1.5, borderColor: colors.border, flexDirection: "row", alignItems: "center", gap: 6, flexShrink: 0 },
+  favChipActive: { backgroundColor: colors.brandPrimary, borderColor: colors.brandPrimary },
+  favChipText: { fontSize: 14, fontWeight: "700", color: colors.onSurface },
+  arrivalRow: { flexDirection: "row", alignItems: "center", gap: 12, minHeight: 52 },
+  arrivalName: { flex: 1, minWidth: 0, fontSize: 15, fontWeight: "700", color: colors.onSurface },
   backdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.55)", justifyContent: "flex-end" },
   sheet: { backgroundColor: colors.surface, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, gap: 16 },
   sosHead: { flexDirection: "row", alignItems: "center", gap: 16 },

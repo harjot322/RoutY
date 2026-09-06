@@ -61,6 +61,7 @@ function Dashboard() {
     { label: t("activeBuses"), value: d?.buses ?? "—", icon: "bus-multiple", color: colors.success, testID: "stat-buses" },
     { label: t("sosActive"), value: d?.sos_active ?? "—", icon: "alarm-light", color: colors.error, testID: "stat-sos" },
     { label: t("demandCount"), value: d?.demand_count ?? "—", icon: "chart-bubble", color: colors.warning, testID: "stat-demand" },
+    { label: t("suggestions"), value: d?.suggestions_new ?? "—", icon: "lightbulb-on-outline", color: colors.brandPrimary, testID: "stat-suggestions" },
   ];
 
   return (
@@ -93,7 +94,10 @@ function Dashboard() {
         <View style={styles.navRow}>
           <NavTile icon="map-marker-path" label={t("manageRoutes")} onPress={() => router.push("/admin/routes")} testID="nav-manage-routes" />
           <NavTile icon="history" label={t("replay")} onPress={() => router.push("/admin/replay")} testID="nav-replay" />
+        </View>
+        <View style={styles.navRow}>
           <NavTile icon="fire" label={t("demandHeatmap")} onPress={() => router.push("/admin/demand")} testID="nav-demand" />
+          <NavTile icon="lightbulb-on-outline" label={t("suggestions")} onPress={() => router.push("/admin/suggestions")} testID="nav-suggestions" badge={d?.suggestions_new} />
         </View>
 
         <Text style={styles.section}>{t("sosAlerts")}</Text>
@@ -131,13 +135,18 @@ function Dashboard() {
   );
 }
 
-function NavTile({ icon, label, onPress, testID }: { icon: string; label: string; onPress: () => void; testID: string }) {
+function NavTile({ icon, label, onPress, testID, badge }: { icon: string; label: string; onPress: () => void; testID: string; badge?: number }) {
   const styles = useStyles();
   const { colors } = useTheme();
   return (
     <Pressable style={styles.tile} onPress={onPress} testID={testID}>
       <Icon name={icon} size={28} color={colors.brandPrimary} />
       <Text style={styles.tileText} numberOfLines={2}>{label}</Text>
+      {!!badge && (
+        <View style={styles.tileBadge}>
+          <Text style={styles.tileBadgeText}>{badge}</Text>
+        </View>
+      )}
     </Pressable>
   );
 }
@@ -149,10 +158,12 @@ const useStyles = makeStyles((colors) => ({
   stat: { flexBasis: "47%", flexGrow: 1, backgroundColor: colors.surface, borderRadius: 12, padding: 14, gap: 4, borderWidth: 1, borderColor: colors.border },
   statValue: { fontSize: 28, fontWeight: "900", color: colors.onSurface },
   statLabel: { fontSize: 13, color: colors.muted, fontWeight: "600" },
-  map: { height: 260, flex: 0, borderRadius: 16, borderWidth: 1, borderColor: colors.border },
+  map: { height: 260, borderRadius: 16, borderWidth: 1, borderColor: colors.border },
   navRow: { flexDirection: "row", gap: 12 },
-  tile: { flex: 1, minHeight: 96, backgroundColor: colors.surface, borderRadius: 12, borderWidth: 1, borderColor: colors.border, alignItems: "center", justifyContent: "center", gap: 8, padding: 8 },
+  tile: { flex: 1, minHeight: 88, backgroundColor: colors.surface, borderRadius: 12, borderWidth: 1, borderColor: colors.border, alignItems: "center", justifyContent: "center", gap: 8, padding: 8, position: "relative" },
   tileText: { fontSize: 13, fontWeight: "700", color: colors.onSurface, textAlign: "center" },
+  tileBadge: { position: "absolute", top: 8, right: 8, minWidth: 24, height: 24, borderRadius: 12, backgroundColor: colors.error, alignItems: "center", justifyContent: "center", paddingHorizontal: 6 },
+  tileBadgeText: { color: colors.onError, fontWeight: "900", fontSize: 12 },
   section: { fontSize: 14, fontWeight: "800", color: colors.muted, textTransform: "uppercase", marginTop: 4 },
   empty: { color: colors.muted, fontSize: 14 },
   alert: { flexDirection: "row", alignItems: "center", gap: 12, backgroundColor: colors.surface, borderRadius: 12, borderWidth: 1.5, padding: 12 },

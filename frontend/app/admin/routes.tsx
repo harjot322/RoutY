@@ -79,6 +79,23 @@ function RoutesManager() {
 
   const updateStop = (i: number, patch: Partial<StopDraft>) => setStops((prev) => prev.map((s, idx) => (idx === i ? { ...s, ...patch } : s)));
 
+  const first = stops[0];
+  const last = stops[stops.length - 1];
+  const endpointsValid = !!first && !!last && [first.lat, first.lng, last.lat, last.lng].every((v) => !isNaN(parseFloat(v)));
+  const findStops = useMutation({
+    mutationFn: () => api.admin.findStops({ lat: parseFloat(first.lat), lng: parseFloat(first.lng) }, { lat: parseFloat(last.lat), lng: parseFloat(last.lng) }),
+    onSuccess: (data) => {
+      if (!data.stops.length) {
+        toast.show(t("noStopsBetween"), "warning");
+        return;
+      }
+      const mids: StopDraft[] = data.stops.map((s) => ({ name: s.name, name_hi: s.name_hi, lat: String(s.lat), lng: String(s.lng) }));
+      setStops([first, ...mids, last]);
+      toast.show(t("stopsAdded", { n: mids.length }), "success");
+    },
+    onError: (e: Error) => toast.show(e.message, "error"),
+  });
+
   return (
     <View style={styles.root} testID="admin-routes-screen">
       <ScreenHeader title={t("manageRoutes")} />
@@ -88,7 +105,7 @@ function RoutesManager() {
             <View style={[styles.badge, { backgroundColor: r.color }]}>
               <Text style={styles.badgeText}>{r.number}</Text>
             </View>
-            <View style={{ flex: 1 }}>
+            <View style={{ flex: 1, minWidth: 0 }}>
               <Text style={styles.name} numberOfLines={1}>{tr(r.name, r.name_hi)}</Text>
               <Text style={styles.meta}>{t("stops", { n: r.stops.length })} · {t("liveBuses", { n: r.bus_count ?? 0 })}</Text>
             </View>
@@ -129,6 +146,8 @@ function RoutesManager() {
           </View>
         ))}
         <BigButton testID="add-stop-button" label={t("addStop")} icon="plus" variant="secondary" onPress={() => setStops((p) => [...p, emptyStop()])} />
+        <BigButton testID="find-stops-button" label={t("findStopsBetween")} icon="map-search-outline" variant="ghost" onPress={() => findStops.mutate()} loading={findStops.isPending} disabled={!endpointsValid} />
+        <Text style={styles.note}>{t("roadNote")}</Text>
         <BigButton testID="create-route-button" label={t("createRoute")} icon="check" onPress={submit} loading={create.isPending} disabled={!canCreate} />
       </KeyboardAwareScrollView>
     </View>
@@ -152,4 +171,5 @@ const useStyles = makeStyles((colors) => ({
   stopHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   stopIdx: { fontWeight: "900", color: colors.brandPrimary, fontSize: 16 },
   pair: { flexDirection: "row", gap: 8 },
+  note: { fontSize: 12, color: colors.muted, textAlign: "center" },
 }));

@@ -55,7 +55,7 @@ function Demand() {
 
 const useStyles = makeStyles((colors) => ({
   root: { flex: 1, backgroundColor: colors.surfaceSecondary },
-  map: { height: 300, flex: 0 },
+  map: { height: 300 },
   intro: { color: colors.muted, fontSize: 14, lineHeight: 20 },
   empty: { color: colors.muted, fontSize: 15, textAlign: "center", paddingVertical: 16 },
   row: { flexDirection: "row", alignItems: "center", gap: 12, backgroundColor: colors.surface, borderRadius: 12, borderWidth: 1, borderColor: colors.border, padding: 12, minHeight: 64 },

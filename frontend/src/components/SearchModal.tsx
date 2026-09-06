@@ -3,7 +3,7 @@ import React, { useMemo, useState } from "react";
 import { FlatList, Modal, Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { Route, SearchResult, api } from "@/src/api";
+import { Route, SearchResult, api, fmtEta } from "@/src/api";
 import { BigButton } from "@/src/components/BigButton";
 import { Icon } from "@/src/components/Icon";
 import { useLanguage } from "@/src/i18n/LanguageContext";
@@ -126,6 +126,17 @@ export function SearchModal({ visible, onClose, routes, coords }: Props) {
                 <Icon name="bus-alert" size={56} color={colors.muted} />
                 <Text style={styles.emptyTitle}>{t("noRouteFound")}</Text>
                 <Text style={styles.emptyBody}>{t("demandNoted")}</Text>
+                <BigButton
+                  testID="search-suggest-route-button"
+                  label={t("suggestRoute")}
+                  icon="lightbulb-on-outline"
+                  variant="secondary"
+                  onPress={() => {
+                    reset();
+                    router.push("/suggest");
+                  }}
+                  style={{ alignSelf: "stretch", marginTop: 8 }}
+                />
               </View>
             }
             renderItem={({ item }) => (
@@ -137,16 +148,35 @@ export function SearchModal({ visible, onClose, routes, coords }: Props) {
                   router.push(`/route/${item.id}`);
                 }}
               >
-                <View style={[styles.badge, { backgroundColor: item.color }]}>
-                  <Text style={styles.badgeText}>{item.number}</Text>
+                <View style={styles.resultTop}>
+                  <View style={[styles.badge, { backgroundColor: item.color }]}>
+                    <Text style={styles.badgeText}>{item.number}</Text>
+                  </View>
+                  <View style={{ flex: 1, minWidth: 0 }}>
+                    <Text style={styles.resultName} numberOfLines={1}>{tr(item.name, item.name_hi)}</Text>
+                    <Text style={styles.resultMeta} numberOfLines={2}>
+                      {tr(item.from_stop.name, item.from_stop.name_hi)} → {tr(item.to_stop.name, item.to_stop.name_hi)}
+                    </Text>
+                  </View>
+                  <Icon name="chevron-right" size={28} color={colors.muted} />
                 </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.resultName}>{tr(item.name, item.name_hi)}</Text>
-                  <Text style={styles.resultMeta}>
-                    {tr(item.from_stop.name, item.from_stop.name_hi)} → {tr(item.to_stop.name, item.to_stop.name_hi)} · {t("stopsBetween", { n: item.stops_between })}
-                  </Text>
+                <View style={styles.factRow}>
+                  <View style={styles.fact}>
+                    <Icon name="cash" size={18} color={colors.success} />
+                    <Text style={[styles.factText, { color: colors.success }]} testID={`result-fare-${item.number}`}>{item.fare_inr != null ? `₹${item.fare_inr}` : "—"}</Text>
+                  </View>
+                  <View style={styles.fact}>
+                    <Icon name="clock-outline" size={18} color={colors.onSurface} />
+                    <Text style={styles.factText}>{item.travel_s != null ? fmtEta(item.travel_s, lang) : "—"}</Text>
+                  </View>
+                  <View style={styles.fact}>
+                    <Icon name="map-marker-distance" size={18} color={colors.onSurface} />
+                    <Text style={styles.factText}>{item.distance_km != null ? `${item.distance_km} km` : "—"}</Text>
+                  </View>
                 </View>
-                <Icon name="chevron-right" size={28} color={colors.muted} />
+                <Text style={styles.via} numberOfLines={2}>
+                  {item.via.length ? `${t("viaStops", { n: item.via.length })}: ${item.via.map((v) => tr(v.name, v.name_hi)).join(" · ")}` : t("noVia")}
+                </Text>
               </Pressable>
             )}
           />
@@ -169,7 +199,12 @@ const useStyles = makeStyles((colors) => ({
   chip: { height: 36, paddingHorizontal: 14, borderRadius: 999, backgroundColor: colors.surfaceTertiary, alignItems: "center", justifyContent: "center", flexShrink: 0 },
   chipText: { fontSize: 14, fontWeight: "600", color: colors.onSurfaceTertiary },
   section: { fontSize: 14, fontWeight: "800", color: colors.muted, textTransform: "uppercase", marginBottom: 4 },
-  result: { flexDirection: "row", alignItems: "center", gap: 12, minHeight: 72, padding: 12, borderRadius: 12, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface },
+  result: { gap: 10, padding: 12, borderRadius: 12, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface },
+  resultTop: { flexDirection: "row", alignItems: "center", gap: 12 },
+  factRow: { flexDirection: "row", gap: 8 },
+  fact: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, height: 36, borderRadius: 8, backgroundColor: colors.surfaceSecondary, minWidth: 0 },
+  factText: { fontSize: 14, fontWeight: "800", color: colors.onSurface },
+  via: { fontSize: 13, color: colors.muted, lineHeight: 18 },
   badge: { width: 52, height: 52, borderRadius: 12, alignItems: "center", justifyContent: "center" },
   badgeText: { color: colors.onBrand, fontWeight: "800" },
   resultName: { fontSize: 16, fontWeight: "700", color: colors.onSurface },
