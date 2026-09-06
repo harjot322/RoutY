@@ -1,0 +1,464 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>RoutY | Real-Time Public Transport Tracking System</title>
+  <meta name="description" content="RoutY: A Real-Time Public Transport Tracking System for Small and Tier-2 Cities.">
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23059669'><path d='M4 16c0 .88.39 1.67 1 2.22V20c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-1h8v1c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-1.78c.61-.55 1-1.34 1-2.22V6c0-3.5-3.58-4-8-4s-8 .5-8 4v10zm3.5 1c-.83 0-1.5-.67-1.5-1.5S6.67 14 7.5 14s1.5.67 1.5 1.5S8.33 17 7.5 17zm9 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm1.5-6H6V6h12v5z'/></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="/socket.io/socket.io.js"></script>
+  <style>
+    body { font-family: 'Inter', sans-serif; }
+    h1, h2, h3, h4, .font-display { font-family: 'Outfit', sans-serif; }
+    #map { width: 100%; height: 100%; z-index: 0; background: #0b1329; }
+    .leaflet-popup-content-wrapper { background: #0f172a !important; color: #fff !important; border-radius: 14px; border: 1px solid rgba(255,255,255,0.15); }
+    .leaflet-popup-tip { background: #0f172a !important; }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-100 flex flex-col h-screen overflow-hidden">
+
+  <!-- Navbar -->
+  <header class="h-16 bg-slate-900/90 backdrop-blur-md border-b border-slate-800 px-4 flex items-center justify-between z-10 shrink-0">
+    <div class="flex items-center gap-3">
+      <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-500 flex items-center justify-center shadow-lg shadow-emerald-900/30">
+        <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h8m-8 4h8m-8 4h4m5 5H7a2 2 0 01-2-2V5a2 2 0 012-2h10a2 2 0 012 2v14a2 2 0 01-2 2z"/></svg>
+      </div>
+      <div>
+        <div class="flex items-center gap-2">
+          <span class="text-xl font-bold font-display text-white">RoutY</span>
+          <span id="cityBadge" class="px-2 py-0.5 text-[10px] uppercase font-bold bg-emerald-950 text-emerald-300 border border-emerald-700/50 rounded-full">Bhopal Transit</span>
+        </div>
+        <p class="text-[11px] text-slate-400 hidden sm:block">Real-Time Public Transport Tracking System</p>
+      </div>
+    </div>
+
+    <!-- Live Telemetry Status -->
+    <div class="flex items-center gap-2 px-3 py-1 rounded-full bg-slate-800/80 border border-slate-700 text-xs">
+      <span id="liveBeacon" class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+      <span id="liveStatusText" class="text-[11px] text-slate-300 font-medium">Telemetry Connected</span>
+    </div>
+
+    <div class="flex items-center gap-3">
+      <button onclick="toggleAdminModal()" class="px-3 py-1.5 rounded-lg bg-blue-600/20 hover:bg-blue-600/30 text-blue-300 border border-blue-500/30 text-xs font-semibold transition-colors">
+        Admin Portal
+      </button>
+    </div>
+  </header>
+
+  <!-- Main Map Workspace -->
+  <div class="flex-1 flex flex-col md:flex-row relative overflow-hidden">
+    
+    <!-- Map Container -->
+    <div class="flex-1 relative h-full">
+      <div id="map"></div>
+
+      <!-- Top Floating Search & Filter Bar -->
+      <div class="absolute top-4 left-4 right-4 md:left-6 md:right-auto md:w-[440px] z-[500] space-y-2">
+        <div class="bg-slate-900/90 backdrop-blur-md border border-slate-700/80 rounded-2xl p-3 shadow-2xl space-y-2.5">
+          
+          <div class="flex items-center gap-2">
+            <div class="relative flex-1">
+              <input
+                id="placeSearchInput"
+                type="text"
+                placeholder="Search landmark (e.g. Railway Station, AIIMS)..."
+                class="w-full bg-slate-800 border border-slate-700 rounded-xl pl-8 pr-3 py-2 text-xs text-white placeholder-slate-400 focus:outline-none focus:border-emerald-500"
+              />
+              <svg class="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+            </div>
+            <button
+              onclick="locateUser()"
+              class="px-3 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-semibold flex items-center gap-1 shrink-0 shadow-lg shadow-emerald-900/30"
+            >
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/></svg>
+              <span>Near Me</span>
+            </button>
+          </div>
+
+          <div id="searchResultsDropdown" class="hidden max-h-48 overflow-y-auto divide-y divide-slate-800 bg-slate-950 border border-slate-700 rounded-xl"></div>
+
+          <div class="grid grid-cols-2 gap-2">
+            <div>
+              <label class="block text-[10px] uppercase font-bold text-slate-400 mb-1">Route</label>
+              <select id="routeSelect" onchange="onRouteChanged(this.value)" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-2 py-1.5 text-xs text-white focus:outline-none">
+                <option value="">All Routes</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-[10px] uppercase font-bold text-slate-400 mb-1">Bus</label>
+              <select id="busSelect" onchange="onBusChanged(this.value)" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-2 py-1.5 text-xs text-white focus:outline-none">
+                <option value="">All Active Fleet</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <div id="nearMeBanner" class="hidden bg-slate-900/90 border border-emerald-500/40 rounded-xl p-2.5 text-xs flex items-center justify-between text-slate-200"></div>
+      </div>
+    </div>
+
+    <!-- Live ETA Sidebar -->
+    <div class="w-full md:w-96 bg-slate-900/95 border-t md:border-t-0 md:border-l border-slate-800 flex flex-col h-72 md:h-full z-10 shrink-0">
+      <div class="p-3.5 border-b border-slate-800 flex items-center justify-between">
+        <div class="flex items-center gap-2">
+          <div class="w-3 h-3 rounded-full bg-emerald-500"></div>
+          <h2 id="sidebarTitle" class="font-bold font-display text-sm text-white">Live Route ETAs</h2>
+        </div>
+        <span id="activeBusBadge" class="text-[10px] px-2 py-0.5 rounded-full bg-slate-800 text-emerald-400 font-mono font-bold"></span>
+      </div>
+
+      <div class="flex-1 overflow-y-auto p-4 space-y-4">
+        <!-- Telemetry Card -->
+        <div id="busTelemetryCard" class="bg-slate-800/60 border border-slate-700 rounded-2xl p-3 space-y-2">
+          <div class="flex items-center justify-between">
+            <span id="cardBusPlate" class="font-bold text-sm text-white">Select a Bus</span>
+            <span id="cardBusStatus" class="text-[10px] font-bold px-2 py-0.5 rounded bg-slate-900 text-slate-400">Standby</span>
+          </div>
+          <div class="grid grid-cols-2 gap-2 text-xs">
+            <div class="bg-slate-900 p-2 rounded-xl border border-slate-800">
+              <span class="text-[10px] text-slate-400 uppercase">Live Speed</span>
+              <div id="cardBusSpeed" class="text-base font-bold font-mono text-emerald-400">-- km/h</div>
+            </div>
+            <div class="bg-slate-900 p-2 rounded-xl border border-slate-800">
+              <span class="text-[10px] text-slate-400 uppercase">Next Stop</span>
+              <div id="cardNextStop" class="text-xs font-bold text-amber-300 truncate mt-0.5">--</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Stop ETAs List -->
+        <div class="space-y-2">
+          <div class="text-[11px] font-bold uppercase tracking-wider text-slate-400 px-1">Upcoming Stops & Arrival Times</div>
+          <div id="etaTimeline" class="space-y-2"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Admin Modal -->
+  <div id="adminModal" class="hidden fixed inset-0 z-[3000] bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-slate-900 border border-slate-700 rounded-3xl p-6 max-w-md w-full space-y-4 shadow-2xl">
+      <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+        <h3 class="font-bold font-display text-white text-lg">Transit Control Center</h3>
+        <button onclick="toggleAdminModal()" class="text-slate-400 hover:text-white">&times;</button>
+      </div>
+      <div class="bg-slate-800/60 border border-slate-700 rounded-xl p-3 text-xs space-y-1">
+        <div class="font-bold text-emerald-400">Default Dev Account</div>
+        <div class="font-mono text-slate-300">admin / RoutYAdmin2026!</div>
+      </div>
+      <div class="space-y-2 text-xs">
+        <label class="block text-slate-400">Username</label>
+        <input id="adminUsername" type="text" value="admin" class="w-full bg-slate-800 border border-slate-700 rounded-xl p-2 text-white" />
+        <label class="block text-slate-400">Password</label>
+        <input id="adminPassword" type="password" value="RoutYAdmin2026!" class="w-full bg-slate-800 border border-slate-700 rounded-xl p-2 text-white" />
+      </div>
+      <div id="adminLoginMsg" class="text-xs text-rose-400"></div>
+      <button onclick="loginAdmin()" class="w-full py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-semibold text-xs transition-colors">
+        Sign In to Control Center
+      </button>
+      <div id="adminPanelLinks" class="hidden pt-3 border-t border-slate-800 space-y-2">
+        <div class="text-xs font-bold text-emerald-400">Quick Management Links:</div>
+        <div class="grid grid-cols-2 gap-2 text-xs">
+          <a href="/admin/routes" class="p-2 bg-slate-800 hover:bg-slate-700 rounded-lg text-center font-medium text-white block">Routes</a>
+          <a href="/admin/stops" class="p-2 bg-slate-800 hover:bg-slate-700 rounded-lg text-center font-medium text-white block">Stops</a>
+          <a href="/admin/buses" class="p-2 bg-slate-800 hover:bg-slate-700 rounded-lg text-center font-medium text-white block">Fleet</a>
+          <a href="/admin/schedules" class="p-2 bg-slate-800 hover:bg-slate-700 rounded-lg text-center font-medium text-white block">Schedules</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let map, routes = [], buses = [], selectedRouteId = '', selectedBusId = '', busMarkers = {}, routeLines = [];
+    const socket = io();
+
+    // Initialize Map
+    function initMap(center = [23.2599, 77.4126], zoom = 13) {
+      map = L.map('map').setView(center, zoom);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; OpenStreetMap contributors',
+        maxZoom: 19
+      }).addTo(map);
+    }
+
+    // Custom bus marker icon
+    function getBusIcon(bus) {
+      const bearing = bus.last_telemetry?.bearing || 0;
+      const speed = Math.round(bus.last_telemetry?.speed_kmh || 0);
+      const color = bus.route_id?.color || '#2563eb';
+      return L.divIcon({
+        html: `
+          <div style="transform: translate(-50%, -50%); display: flex; flex-direction: column; align-items: center;">
+            <div style="background: #0f172a; border: 1px solid #334155; border-radius: 6px; padding: 2px 6px; font-size: 10px; font-weight: bold; color: #fff; margin-bottom: 2px; box-shadow: 0 4px 6px rgba(0,0,0,0.5);">
+              <span style="color:${color}">●</span> ${bus.bus_number.split('-')[0] || bus.bus_number} <span style="color:#10b981">${speed}k</span>
+            </div>
+            <div style="width: 32px; height: 32px; background: ${color}; border: 2px solid #fff; border-radius: 10px; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 10px rgba(0,0,0,0.6);">
+              <div style="transform: rotate(${bearing}deg); transition: transform 0.4s ease;">
+                <svg style="width: 16px; height: 16px; fill: #fff;" viewBox="0 0 24 24"><path d="M12 2L4.5 20.29l.71.71L12 18l6.79 3 .71-.71z"/></svg>
+              </div>
+            </div>
+          </div>
+        `,
+        className: 'custom-bus',
+        iconSize: [40, 50],
+        iconAnchor: [20, 25]
+      });
+    }
+
+    // Load Initial Data
+    async function loadData() {
+      try {
+        const [cfgRes, routesRes, busesRes] = await Promise.all([
+          fetch('/api/public/config').then(r => r.json()),
+          fetch('/api/public/routes').then(r => r.json()),
+          fetch('/api/public/buses').then(r => r.json())
+        ]);
+        routes = routesRes;
+        buses = busesRes;
+        document.getElementById('cityBadge').innerText = `${cfgRes.city} Civic Transit`;
+        initMap(cfgRes.defaultCenter || [23.2599, 77.4126], cfgRes.defaultZoom || 13);
+        renderRouteOptions();
+        renderBusOptions();
+        renderRoutesOnMap();
+        renderBusesOnMap();
+        if (routes.length > 0) onRouteChanged(routes[0]._id);
+      } catch (err) {
+        console.error(err);
+      }
+    }
+
+    function renderRouteOptions() {
+      const select = document.getElementById('routeSelect');
+      routes.forEach(r => {
+        const opt = document.createElement('option');
+        opt.value = r._id;
+        opt.innerText = `${r.route_number}: ${r.name}`;
+        select.appendChild(opt);
+      });
+    }
+
+    function renderBusOptions() {
+      const select = document.getElementById('busSelect');
+      select.innerHTML = '<option value="">All Active Fleet</option>';
+      buses.forEach(b => {
+        const opt = document.createElement('option');
+        opt.value = b._id;
+        opt.innerText = `${b.bus_number} (${Math.round(b.last_telemetry?.speed_kmh || 0)} km/h)`;
+        select.appendChild(opt);
+      });
+    }
+
+    function renderRoutesOnMap() {
+      routeLines.forEach(l => map.removeLayer(l));
+      routeLines = [];
+      routes.forEach(r => {
+        if (selectedRouteId && r._id !== selectedRouteId) return;
+        const coords = r.geojson?.coordinates?.map(c => [c[1], c[0]]) || [];
+        if (coords.length < 2) return;
+        const line = L.polyline(coords, {
+          color: r.color || '#2563eb',
+          weight: r._id === selectedRouteId ? 6 : 4,
+          opacity: r._id === selectedRouteId ? 0.9 : 0.4
+        }).addTo(map);
+        routeLines.push(line);
+
+        // Stops pins
+        if (r._id === selectedRouteId) {
+          r.stops?.forEach((s, idx) => {
+            const stopMarker = L.marker([s.latitude, s.longitude], {
+              icon: L.divIcon({
+                html: `<div style="background:#0f172a; border:2px solid #10b981; color:#fff; border-radius:999px; width:22px; height:22px; display:flex; align-items:center; justify-content:center; font-size:10px; font-weight:bold; box-shadow:0 2px 5px rgba(0,0,0,0.5);">${idx+1}</div>`,
+                className: 'stop-pin',
+                iconSize: [22, 22],
+                iconAnchor: [11, 11]
+              })
+            }).addTo(map);
+            stopMarker.bindPopup(`<b>${s.name}</b><br/><span style="color:#94a3b8">${s.name_hi || ''}</span>`);
+            routeLines.push(stopMarker);
+          });
+        }
+      });
+    }
+
+    function renderBusesOnMap() {
+      buses.forEach(bus => {
+        const lat = bus.last_telemetry?.latitude;
+        const lng = bus.last_telemetry?.longitude;
+        if (!lat || !lng) return;
+        if (selectedRouteId && (bus.route_id?._id || bus.route_id) !== selectedRouteId) {
+          if (busMarkers[bus._id]) map.removeLayer(busMarkers[bus._id]);
+          return;
+        }
+
+        if (busMarkers[bus._id]) {
+          busMarkers[bus._id].setLatLng([lat, lng]);
+          busMarkers[bus._id].setIcon(getBusIcon(bus));
+        } else {
+          const marker = L.marker([lat, lng], { icon: getBusIcon(bus) }).addTo(map);
+          marker.on('click', () => onBusChanged(bus._id));
+          busMarkers[bus._id] = marker;
+        }
+      });
+    }
+
+    function onRouteChanged(routeId) {
+      selectedRouteId = routeId;
+      document.getElementById('routeSelect').value = routeId;
+      const r = routes.find(x => x._id === routeId);
+      document.getElementById('sidebarTitle').innerText = r ? `${r.route_number} Live ETAs` : 'Transit Overview';
+      renderRoutesOnMap();
+      renderBusesOnMap();
+      const firstBus = buses.find(b => (b.route_id?._id || b.route_id) === routeId);
+      if (firstBus) updateSidebarETA(firstBus, r);
+    }
+
+    function onBusChanged(busId) {
+      selectedBusId = busId;
+      document.getElementById('busSelect').value = busId;
+      const b = buses.find(x => x._id === busId);
+      if (b) {
+        if (b.route_id?._id) onRouteChanged(b.route_id._id);
+        const r = routes.find(x => x._id === (b.route_id?._id || b.route_id));
+        updateSidebarETA(b, r);
+        if (b.last_telemetry?.latitude) {
+          map.flyTo([b.last_telemetry.latitude, b.last_telemetry.longitude], 15);
+        }
+      }
+    }
+
+    function updateSidebarETA(bus, route) {
+      document.getElementById('activeBusBadge').innerText = bus.bus_number;
+      document.getElementById('cardBusPlate').innerText = bus.bus_number;
+      document.getElementById('cardBusStatus').innerText = bus.last_telemetry?.is_stale ? 'Signal Paused' : 'Active Live';
+      document.getElementById('cardBusSpeed').innerText = `${Math.round(bus.last_telemetry?.speed_kmh || 0)} km/h`;
+      document.getElementById('cardNextStop').innerText = bus.last_telemetry?.next_stop_name || 'En Route';
+
+      const timeline = document.getElementById('etaTimeline');
+      timeline.innerHTML = '';
+      if (!route?.stops) return;
+
+      route.stops.forEach((stop, idx) => {
+        const eta = bus.etas?.find(e => e.stop_sequence === stop.sequence);
+        const isNext = bus.last_telemetry?.next_stop_name === stop.name;
+
+        const row = document.createElement('div');
+        row.className = `p-2.5 rounded-xl border flex items-center justify-between text-xs cursor-pointer transition-all ${
+          isNext ? 'bg-amber-500/10 border-amber-500/40 shadow' : 'bg-slate-800/40 border-slate-800 hover:border-slate-700'
+        }`;
+        row.onclick = () => map.flyTo([stop.latitude, stop.longitude], 16);
+        row.innerHTML = `
+          <div class="flex items-center gap-2">
+            <span class="w-4 h-4 rounded-full ${isNext ? 'bg-amber-400' : 'bg-emerald-500'} text-slate-950 font-bold text-[9px] flex items-center justify-center">${idx+1}</span>
+            <div>
+              <div class="font-semibold text-white">${stop.name}</div>
+              <div class="text-[10px] text-slate-400">${stop.name_hi || ''}</div>
+            </div>
+          </div>
+          <span class="px-2 py-0.5 rounded text-[11px] font-bold ${isNext ? 'bg-amber-400 text-slate-950' : 'bg-slate-800 text-emerald-400'}">
+            ${eta?.eta_formatted || (isNext ? 'Approaching' : '--')}
+          </span>
+        `;
+        timeline.appendChild(row);
+      });
+    }
+
+    // Socket Telemetry listener
+    socket.on('telemetry:update', (data) => {
+      buses = buses.map(b => b.bus_number === data.bus_number ? { ...b, last_telemetry: data, etas: data.etas } : b);
+      renderBusesOnMap();
+      const currentActive = buses.find(b => b.bus_number === data.bus_number);
+      if (currentActive && (selectedBusId === currentActive._id || (!selectedBusId && selectedRouteId === data.route_id))) {
+        const r = routes.find(x => x._id === data.route_id);
+        updateSidebarETA(currentActive, r);
+      }
+    });
+
+    // Free OpenStreetMap Nominatim Place Search
+    const searchInput = document.getElementById('placeSearchInput');
+    const dropdown = document.getElementById('searchResultsDropdown');
+    let searchTimer = null;
+
+    searchInput.addEventListener('input', (e) => {
+      clearTimeout(searchTimer);
+      const q = e.target.value.trim();
+      if (q.length < 2) { dropdown.classList.add('hidden'); return; }
+
+      searchTimer = setTimeout(async () => {
+        try {
+          const resp = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q + ', Bhopal, India')}&limit=5&countrycodes=in`);
+          const results = await resp.json();
+          dropdown.innerHTML = '';
+          if (results.length === 0) {
+            dropdown.innerHTML = '<div class="p-3 text-xs text-slate-400">No matching places found</div>';
+          } else {
+            results.forEach(p => {
+              const item = document.createElement('div');
+              item.className = 'p-2.5 hover:bg-slate-800 cursor-pointer text-xs text-white';
+              item.innerHTML = `<div class="font-semibold text-emerald-300">${p.display_name.split(',')[0]}</div><div class="text-[10px] text-slate-400 truncate">${p.display_name}</div>`;
+              item.onclick = () => {
+                map.flyTo([parseFloat(p.lat), parseFloat(p.lon)], 16);
+                dropdown.classList.add('hidden');
+                searchInput.value = p.display_name.split(',')[0];
+              };
+              dropdown.appendChild(item);
+            });
+          }
+          dropdown.classList.remove('hidden');
+        } catch (err) {
+          console.warn(err);
+        }
+      }, 300);
+    });
+
+    // Locate Me (Free Browser GPS)
+    function locateUser() {
+      if (!navigator.geolocation) { alert('Geolocation not supported'); return; }
+      navigator.geolocation.getCurrentPosition(async (pos) => {
+        const lat = pos.coords.latitude, lng = pos.coords.longitude;
+        map.flyTo([lat, lng], 15);
+        L.circleMarker([lat, lng], { radius: 8, color: '#3b82f6', fillColor: '#2563eb', fillOpacity: 1 }).addTo(map).bindPopup('You are here').openPopup();
+
+        const res = await fetch(`/api/public/nearest-stops?lat=${lat}&lng=${lng}`).then(r => r.json());
+        if (res.length > 0) {
+          const banner = document.getElementById('nearMeBanner');
+          banner.innerHTML = `<span>Nearest: <b>${res[0].name}</b> (${res[0].distance_meters}m • ~${res[0].walking_time_min} min walk)</span><button onclick="map.flyTo([${res[0].latitude}, ${res[0].longitude}], 16)" class="font-bold text-emerald-400 ml-2">Zoom</button>`;
+          banner.classList.remove('hidden');
+        }
+      }, (err) => alert('Location permission denied'));
+    }
+
+    function toggleAdminModal() {
+      document.getElementById('adminModal').classList.toggle('hidden');
+    }
+
+    async function loginAdmin() {
+      const u = document.getElementById('adminUsername').value;
+      const p = document.getElementById('adminPassword').value;
+      try {
+        const res = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username: u, password: p })
+        }).then(r => r.json());
+        if (res.token) {
+          localStorage.setItem('routy_admin_token', res.token);
+          document.getElementById('adminLoginMsg').innerText = 'Authenticated! Choose a module:';
+          document.getElementById('adminPanelLinks').classList.remove('hidden');
+        } else {
+          document.getElementById('adminLoginMsg').innerText = res.message || 'Login failed';
+        }
+      } catch (err) {
+        document.getElementById('adminLoginMsg').innerText = 'Network error during login';
+      }
+    }
+
+    window.onload = loadData;
+  </script>
+</body>
+</html>

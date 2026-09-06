@@ -1,0 +1,25 @@
+{
+  "name": "routy-backend",
+  "version": "1.0.0",
+  "description": "RoutY: Real-time public transport tracking backend for small and tier-2 cities",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "test": "node tests/runAllTests.js"
+  },
+  "dependencies": {
+    "@turf/turf": "^6.5.0",
+    "axios": "^1.7.2",
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "jsonwebtoken": "^9.0.2",
+    "mongoose": "^7.6.3",
+    "socket.io": "^4.7.5"
+  },
+  "devDependencies": {
+    "mongodb-memory-server": "^9.1.6"
+  }
+}
