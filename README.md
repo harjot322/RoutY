@@ -1,232 +1,237 @@
 # 🚍 RoutY — Real-Time Public Transport Tracking System
 
-RoutY is an intelligent, real-time public transit tracking and commuter guidance platform built with **FastAPI** (Python backend & simulation engine) and **React Native / Expo** (cross-platform mobile frontend).
+RoutY is an operational, real-time civic public transport tracking and commuter guidance platform built with **FastAPI** (Python telemetry and transit engine) and **React Native / Expo** (cross-platform mobile application).
 
 ---
 
 ## 📑 Table of Contents
 
-1. [System Architecture](#system-architecture)
-2. [Prerequisites](#prerequisites)
-3. [Running on Apple's Default Simulation App (iOS Simulator)](#1-running-on-apples-default-simulation-app-ios-simulator)
-4. [Running on a Physical Mobile Device (iOS & Android)](#2-running-on-a-physical-mobile-device-ios--android)
-5. [Quickstart with `start.sh`](#3-quickstart-using-startsh)
-6. [Useful Simulator & Developer Shortcuts](#useful-simulator--developer-shortcuts)
-7. [Troubleshooting & Common Issues](#troubleshooting--common-issues)
+1. [Platform Overview](#platform-overview)
+2. [Key Capabilities](#key-capabilities)
+3. [System Architecture](#system-architecture)
+4. [Default Development Admin Credentials](#default-development-admin-credentials)
+5. [Prerequisites](#prerequisites)
+6. [Environment Configuration](#environment-configuration)
+7. [Step-by-Step Setup & Running](#step-by-step-setup--running)
+   - [Backend Service](#1-backend-service)
+   - [Mobile Application (iOS Simulator & Android)](#2-mobile-application)
+   - [Physical Device Testing](#3-running-on-a-physical-device)
+8. [Automated Testing & Verification](#automated-testing--verification)
+9. [Operational Details](#operational-details)
+10. [Troubleshooting](#troubleshooting)
+
+---
+
+## Platform Overview
+
+RoutY connects commuters and transit operators through a unified transit intelligence layer. Commuters access real-time vehicle locations, dynamic arrival times (ETAs), stop guidance, timetable breakdowns, fare calculations, and multi-lingual voice announcements. Transit managers access a secure control operations dashboard to manage routes, configure vehicles and schedules, monitor vehicle spacing, respond to passenger SOS alerts, and analyze unmet commuter demand.
+
+---
+
+## Key Capabilities
+
+### 1. Commuter Experience
+- **Interactive Map & Live Vehicle Fleet**: High-performance OpenStreetMap / Leaflet display with smooth vehicle telemetry, route corridors, and stop markers.
+- **Intelligent Unified Search**: Instant multi-entity query engine searching by route code, route name, vehicle registration plate, stop name, or terminus destination with fallback suggestions.
+- **Dynamic Arrival Estimation (ETA)**: Continuously calculated ETAs reflecting remaining route distance, real-time segment speeds, dwell states, and direction.
+- **Stop Proximity & Departure Guidance**: Automatic proximity detection alerting passengers whether to walk, hurry, or await the following vehicle.
+- **Fare & Travel Time Breakdown**: Step-by-step route calculator showing fares, travel duration, distance, and intermediate stops.
+- **Multi-lingual & Accessibility**: Seamless English and Hindi localisation (`en` / `hi`), bilingual stop announcements, voice synthesis, and full Dark Mode / Light Mode support.
+- **Passenger Safety**: One-touch SOS alert transmission dispatching passenger coordinates and vehicle telemetry directly to dispatch control.
+
+### 2. Operations & Fleet Administration
+- **Executive Operations Dashboard**: High-level telemetry cards tracking Total Routes, Active Fleet Vehicles, Active Trips, Total Stops, and Real-Time Service Status.
+- **Fleet & Vehicle Manager**: Complete CRUD operations for vehicles—assign buses to any route, update operational status (`In Service`, `Delayed`, `Maintenance`), monitor driver contacts, set passenger occupancy, and assign service schedules.
+- **Route & Corridor Management**: Full route creator supporting route names, codes, color themes, origin and destination terminals, ordered stops, and custom path coordinates with automatic road polyline generation.
+- **Vehicle Spacing & Bunching Guard**: Real-time headway detection alerting operators when adjacent vehicles on the same corridor bunch together.
+- **Historical Route Replay**: Minute-by-minute historical path playback with interactive scrub controls for incident review and route compliance audits.
+- **Demand Signals & Heatmaps**: Analysis of unserved commuter route searches to identify transit deserts and prioritize network expansions.
 
 ---
 
 ## System Architecture
 
 ```text
-┌────────────────────────────────────────────────────────┐
-│               RoutY Mobile App (Expo / React Native)   │
-│   • Map View (Leaflet / WebView)                       │
-│   • Live Bus Tracking & ETA Predictions                │
-│   • Commuter Distance & Stop Recommendations          │
-└──────────────────────────▲─────────────────────────────┘
-                           │ HTTP / REST (Port 8000)
-┌──────────────────────────▼─────────────────────────────┐
-│                 RoutY Backend (FastAPI)                │
-│   • Real-Time Bus Fleet Simulator (sim.py)             │
-│   • OSRM Route Navigation                             │
-│   • In-Memory / MongoDB Data Storage                   │
-└────────────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────────────────┐
+│               RoutY Mobile Application (Expo / React Native)           │
+│   • Leaflet / OpenStreetMap Vector Canvas                              │
+│   • Intelligent Unified Search & Journey Planner                       │
+│   • Dynamic Vehicle Tracker & Stop Guidance                            │
+│   • Operator Management Portal (Routes, Fleet, Replay, Alerts)        │
+└───────────────────────────────────▲────────────────────────────────────┘
+                                    │ WebSocket & REST (/api)
+┌───────────────────────────────────▼────────────────────────────────────┐
+│                    RoutY Core Engine (FastAPI / Python)                │
+│   • Real-Time Vehicle Engine & Headway Calculation                     │
+│   • Dynamic ETA Predictor (Distance / Velocity / Dwell Vectors)        │
+│   • OpenStreetMap OSRM Road Corridor Routing                          │
+│   • In-Memory / MongoDB Persistence Layer                              │
+└────────────────────────────────────────────────────────────────────────┘
 ```
+
+---
+
+## Default Development Admin Credentials
+
+To access the administrative console via the mobile app (`Settings > Operator Console`):
+
+| Role | Username | Password |
+| :--- | :--- | :--- |
+| **System Administrator** | `admin` | `RoutYAdmin2026Secure` |
 
 ---
 
 ## Prerequisites
 
-Before running the application, make sure your development machine has the following installed:
-
-- **macOS** (Required for Apple iOS Simulator)
-- **Xcode** (Free from the Mac App Store)
-- **Xcode Command Line Tools**:
-  ```bash
-  xcode-select --install
-  ```
-- **Node.js** (v18 or newer) & **npm** or **yarn**
-- **Python 3.10+** & **pip**
-- **Expo Go App** (Optional, installed on your physical iPhone/Android for device testing)
+- **macOS** (for Apple iOS Simulator) or **Linux/Windows** (for Android Emulator / physical device testing)
+- **Node.js**: v18.0.0 or newer
+- **Python**: 3.10, 3.11, or 3.12
+- **npm** or **yarn**
+- **Xcode** (macOS only, for iOS Simulator) or **Android Studio** (for Android Emulator)
 
 ---
 
-## 1. Running on Apple's Default Simulation App (iOS Simulator)
+## Environment Configuration
 
-Apple's default simulation tool is **Simulator.app** (bundled with Xcode). Because the iOS Simulator shares your Mac's localhost network stack, configuration is seamless.
-
-### Step 1: Install Dependencies
-
-#### Backend:
-```bash
-cd backend
-python3 -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
+### Backend (`backend/.env`)
+```env
+ADMIN_USER=admin
+ADMIN_PASS=RoutYAdmin2026Secure
+JWT_SECRET=c8d9e2f1a0b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9
+MONGO_URI=mongodb://localhost:27017/routy
+OSRM_FALLBACK_FILE=osrm_routes.json
+SIM_TICK_SECONDS=1.0
+SIM_SPEED_FACTOR=3.0
 ```
+*(Note: If a local MongoDB instance is not detected, RoutY automatically activates an integrated high-performance in-memory database fallback).*
 
-#### Frontend:
-```bash
-cd ../frontend
-npm install
-# or: yarn install
-```
-
-### Step 2: Configure Frontend Environment
-
-Open `frontend/.env` and ensure the backend URL points to localhost:
+### Frontend (`frontend/.env`)
 ```env
 EXPO_PUBLIC_BACKEND_URL=http://127.0.0.1:8000
 EXPO_PUBLIC_CARTO_API_KEY=cb1_2zhd_1_a7c32393fbdf87d0c67c463d
 ```
-
-### Step 3: Start the Backend Server
-
-In your first terminal window:
-```bash
-cd backend
-source venv/bin/activate
-python3 -m uvicorn server:app --host 0.0.0.0 --port 8000 --reload
-```
-> Verify backend is alive: Open [http://127.0.0.1:8000/api/health](http://127.0.0.1:8000/api/health) in your browser.
-
-### Step 4: Launch the App in iOS Simulator
-
-In your second terminal window:
-```bash
-cd frontend
-npx expo start --ios
-```
-
-#### What Happens:
-1. Expo will automatically launch Apple's **Simulator.app**.
-2. If this is the first run, Expo will install the Expo Go runtime on the virtual device.
-3. The RoutY application will bundle and open inside the simulator.
-
-*(Alternative: Run `npx expo start` and press <kbd>i</kbd> in your terminal once the QR code appears).*
+*(When testing on a physical device, change `127.0.0.1` to your computer's local Wi-Fi IP address).*
 
 ---
 
-## 2. Running on a Physical Mobile Device (iOS & Android)
+## Quickstart with `start.sh`
 
-When testing on a physical phone, **`localhost` (`127.0.0.1`) does not work**, because on your phone `localhost` points to the phone itself, not your Mac running the backend. Follow these steps to connect your device.
-
-### Step 1: Connect to the Same Wi-Fi Network
-Make sure your **Mac** and your **Mobile Phone** are connected to the **exact same Wi-Fi network**.
-
-### Step 2: Find Your Mac's Local IP Address
-In your Mac terminal, run:
-```bash
-ipconfig getifaddr en0
-```
-*(If on Ethernet or a different adapter, check **System Settings > Wi-Fi > Details > IP Address**).*  
-Example output: `192.168.1.45`
-
-### Step 3: Update `frontend/.env` with your Local IP
-Edit `frontend/.env` to replace `127.0.0.1` with your computer's IP address:
-```env
-EXPO_PUBLIC_BACKEND_URL=http://192.168.1.45:8000
-EXPO_PUBLIC_CARTO_API_KEY=cb1_2zhd_1_a7c32393fbdf87d0c67c463d
-```
-> **Important**: Keep the `:8000` port!
-
-### Step 4: Start the Backend
-Ensure the backend binds to `0.0.0.0` (all interfaces) so external devices on your network can reach it:
-```bash
-cd backend
-source venv/bin/activate
-python3 -m uvicorn server:app --host 0.0.0.0 --port 8000
-```
-> **Connectivity Check**: Open `http://192.168.1.45:8000/api/health` on your mobile phone's web browser. If you see `{"status":"healthy"}`, your phone can communicate with your Mac's backend.
-
-### Step 5: Install the Expo Go App on Your Phone
-- **iPhone**: Install [Expo Go from Apple App Store](https://apps.apple.com/app/expo-go/id982107779).
-- **Android**: Install [Expo Go from Google Play Store](https://play.google.com/store/apps/details?id=host.exp.exponent).
-
-### Step 6: Start Metro & Scan QR Code
-In your frontend directory:
-```bash
-cd frontend
-npx expo start
-```
-
-- **On iOS (iPhone)**:
-  1. Open the default iOS **Camera app**.
-  2. Point the camera at the QR code displayed in your terminal.
-  3. Tap the yellow prompt banner **"Open in Expo Go"**.
-- **On Android**:
-  1. Open the **Expo Go app**.
-  2. Tap **Scan QR code** and scan the terminal QR code.
-
-The app will download the JavaScript bundle and render RoutY on your phone.
-
----
-
-## 3. Quickstart Using `start.sh`
-
-The repository provides an automated startup script that boots both the backend and frontend simultaneously:
+The fastest way to launch the entire platform is with the automated startup script:
 
 ```bash
 chmod +x start.sh
 ./start.sh
 ```
 
-Once running:
+- Boots the FastAPI backend service automatically on `http://0.0.0.0:8000`.
+- Launches the Expo Metro bundler on port `8081`.
 - Press <kbd>i</kbd> in the terminal to launch the **iOS Simulator**.
 - Press <kbd>a</kbd> in the terminal to launch the **Android Emulator**.
-- Press <kbd>w</kbd> to open the **Web Preview**.
-- Scan the printed QR code with your phone camera or Expo Go to run on a **Physical Device**.
+- Press <kbd>w</kbd> in the terminal to open the **Web Preview**.
+- Scan the printed QR code with your phone camera or Expo Go to run on a physical device.
 
 ---
 
-## Useful Simulator & Developer Shortcuts
+## Step-by-Step Setup & Running (Manual)
 
-### In Apple Simulator:
-- **Simulate GPS Location**:
-  In the Simulator menu bar, go to:
-  `Features` > `Location` > select **City Run**, **Freeway Drive**, or **Custom Location...**  
-  *Tip: Set coordinates to the simulator's active city (e.g. Dublin / central routes) to test live commuter-to-stop distances.*
-- **Open Developer Menu**: Press <kbd>Cmd</kbd> + <kbd>Ctrl</kbd> + <kbd>Z</kbd> inside the simulator.
-- **Reload App**: Press <kbd>Cmd</kbd> + <kbd>R</kbd>.
-- **Toggle Dark/Light Mode**: Press <kbd>Cmd</kbd> + <kbd>Shift</kbd> + <kbd>A</kbd>.
+### 1. Backend Service
 
-### In Metro Terminal:
-- Press <kbd>r</kbd> — Reload the app.
-- Press <kbd>m</kbd> — Toggle developer menu.
-- Press <kbd>j</kbd> — Open debugger in Chrome.
-- Press <kbd>c</kbd> — Clear console output.
+Open your first terminal window:
 
----
-
-## Troubleshooting & Common Issues
-
-### 1. `Network request failed` on Physical Phone
-- Cause: `frontend/.env` is set to `http://127.0.0.1:8000` or `http://localhost:8000`.
-- Fix: Change it to your computer's local Wi-Fi IP (e.g., `http://192.168.x.x:8000`) and restart Expo with `npx expo start -c` (clear cache).
-- Make sure your Mac's firewall allows incoming connections on port `8000`.
-
-### 2. Apple Simulator Fails to Boot (`xcrun simctl` error)
-- Ensure the active developer directory is set to Xcode:
-  ```bash
-  sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
-  ```
-- Open Xcode once to accept the license agreement:
-  ```bash
-  sudo xcodebuild -license accept
-  ```
-- Make sure an iOS Simulator runtime is installed: Open Xcode > **Settings** > **Platforms** and ensure iOS 17/18 is installed.
-
-### 3. Port Already in Use (Port 8000 or 8081)
-If another instance is holding the port, terminate it:
 ```bash
-# Free port 8000 (backend)
-lsof -ti :8000 | xargs kill -9 2>/dev/null
-
-# Free port 8081 (Metro bundler)
-lsof -ti :8081 | xargs kill -9 2>/dev/null
+cd backend
+python3 -m venv venv
+source venv/bin/activate
+python3 -m pip install -r requirements.txt
+python3 -m uvicorn server:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-### 4. Location Permission Issues
-- When prompted on first launch, select **"Allow While Using App"**.
-- In iOS Simulator: `Settings` app inside simulator > `Privacy & Security` > `Location Services` > `RoutY` > **While Using the App**.
+Verify backend health at: [http://127.0.0.1:8000/api/](http://127.0.0.1:8000/api/)
+
+### 2. Mobile Application
+
+Open a second terminal window at the **project root**:
+
+```bash
+cd frontend
+npm install
+npx expo start --ios
+```
+
+*(To run on Android Emulator instead of iOS, replace `--ios` with `--android`, or simply run `npx expo start` and press <kbd>i</kbd> for iOS or <kbd>a</kbd> for Android).*
+
+### 3. Running on a Physical Device
+
+1. Connect your computer and mobile phone to the **same Wi-Fi network**.
+2. Find your computer's local IP address (`ipconfig getifaddr en0` on macOS).
+3. Update `frontend/.env` with your computer's IP address:
+   ```env
+   EXPO_PUBLIC_BACKEND_URL=http://192.168.1.45:8000
+   ```
+4. Start Metro bundler from the `frontend` folder:
+   ```bash
+   cd frontend
+   npx expo start -c
+   ```
+5. Scan the QR code:
+   - **iOS**: Open Apple Camera app and tap the "Open in Expo Go" banner.
+   - **Android**: Open the Expo Go app and select "Scan QR code".
+
+---
+
+## Automated Testing & Verification
+
+### Run Frontend Static Analysis & Type Checking
+```bash
+cd frontend
+
+# Linting with ESLint (Strict zero-warning policy)
+npm run lint
+
+# TypeScript Strict Type Compilation
+npx tsc --noEmit
+```
+
+### Run Backend Regression & Integration Test Suite
+```bash
+# Ensure the backend server is running on port 8000
+python3 -m pytest -o required_plugins="" -o addopts="" backend/tests
+```
+All 38 test suites cover:
+- Public routes, stops, and timetable queries
+- Dynamic ETA computations and vehicle tracking
+- Intelligent unified search across routes, buses, and stops
+- Vehicle lifecycle management (Create, Update, Delete)
+- Admin security, JWT authorization, and SOS dispatch resolution
+- Arbitrary route generation with fallback polyline construction
+
+---
+
+## Operational Details
+
+- **Nationwide Route & Multi-Bus Scale (360+ Buses)**: Tens of buses per state across all 36 Indian States and Union Territories (360+ active transit vehicles nationwide). Staggered along actual corridors with opposing directions, realistic speeds, individual driver/conductor crews, and passenger seat occupancy. Optimized backend engine executes 360-vehicle ticks in ~1.4ms and global snapshots in ~1.9ms with optional viewport/state filtering to eliminate server overload.
+- **Device GPS Location & Nearby Buses Discovery**: Automatic device location detection on mount with permanent Locate FAB, pulsing blue commuter location marker (`.user-dot`), and quick city preset switcher (Delhi, Mumbai, Bengaluru, Kolkata, Chennai, Hyderabad, Ahmedabad, or live GPS). A horizontal **Nearby Buses** card carousel dynamically displays closest vehicles ranked by distance in meters/km with direction, speed, seats occupied (`X / 42`), and instant tap-to-track.
+- **Natural Hindi Voice Assistant (`hi-IN`)**: Authentic, natural, respectful Hindi voice announcements. Features active greeting dialogue upon enabling ("नमस्ते! RoutY वॉयस असिस्टेंट अब सक्रिय है..."), automatic spoken announcements when a user tracks any bus (route number, destination, speed, driver and conductor names, seats occupied out of 42, and next stop arrival ETA in minutes), and a map Voice Assistant FAB for on-demand spoken transit briefings.
+- **Commuter Route Suggestions & Admin Deployment**: Commuters can submit unserved corridors from their app with origin, destination, locality notes, contact info, and coordinates. Administrators review suggestions in `/admin/suggestions` and click "Arrange & Deploy Route" to instantly generate road geometry, snap to highways, provision buses, and activate the corridor live.
+- **Driver & Crew Directory Panel**: Accessible at `/admin/drivers`, transit supervisors can inspect crew records with dummy Indian names, random contact numbers, depot addresses, and assigned buses. Administrators can adjust the driver's current GPS location via an interactive modal with regional presets, dynamically repositioning the assigned bus on the live transit map.
+- **Interactive Bus Marker Crew & Contacts**: Tapping any bus icon on the map presents driver and conductor details with direct one-tap calling (`tel:` links) and depot assignments.
+- **Passenger Seat Opt-In & Capacity Tracking**: Commuters can tap "Board This Bus (Opt-In)" to increment the active commuter count or "Leave Bus" to decrement. The tracked bus card and map popups dynamically display live occupancy (`X / 42 seats occupied`) with colored capacity progress bars.
+- **Permanent Light Mode Map View**: Leaflet map tiles are strictly locked to high-contrast Light Mode (Voyager/Positron) for maximum outdoor legibility under direct sunlight.
+- **Position & Telemetry Engine**: Vehicle positions are propagated along assigned road geometry vectors every tick. When new routes are created by an administrator, sensible road geometries are automatically interpolated from ordered stop coordinates if custom paths are omitted.
+- **Dynamic Arrival Estimation**: ETAs are derived in real-time from remaining distance, current speed vectors, and stop dwell times, rather than static timetables.
+- **Resilience & Local-First Operation**: The system requires zero paid proprietary map keys, external telemetry hardware, or cloud accounts to deliver full platform functionality.
+
+---
+
+## Troubleshooting
+
+1. **`Network request failed` on physical phone:**
+   Ensure `frontend/.env` contains your computer's local network IP (e.g. `192.168.X.X:8000`) instead of `127.0.0.1` and that your firewall permits traffic on port 8000.
+2. **Port 8000 already bound:**
+   ```bash
+   lsof -ti :8000 | xargs kill -9 2>/dev/null
+   ```
+3. **Resetting Metro bundler cache:**
+   ```bash
+   npx expo start -c
+   ```

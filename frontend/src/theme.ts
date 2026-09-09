@@ -76,11 +76,52 @@ const light = {
   divider: "#F1F5F9",
 };
 
+const dark: ThemeColors = {
+  // Surfaces: Deep navy / slate charcoal palette
+  surface: "#0F172A", // primary card / header background (slate-900)
+  onSurface: "#F8FAFC", // crisp high-contrast white text (slate-50)
+  surfaceSecondary: "#0B0F19", // main canvas / screen backdrop
+  onSurfaceSecondary: "#E2E8F0", // slate-200
+  surfaceTertiary: "#1E293B", // input fills, chips (slate-800)
+  onSurfaceTertiary: "#CBD5E1", // slate-300
+  surfaceInverse: "#F8FAFC",
+  onSurfaceInverse: "#0F172A",
+  muted: "#94A3B8", // slate-400
+
+  // Brand: Civic teal / cyan electric highlights on midnight base
+  brand: "#0D9488", // teal-600
+  onBrand: "#FFFFFF",
+  brandPrimary: "#0D9488", // vibrant teal CTA
+  onBrandPrimary: "#FFFFFF",
+  brandSecondary: "#1E293B",
+  onBrandSecondary: "#2DD4BF", // teal-400
+  brandTertiary: "#334155",
+  onBrandTertiary: "#F8FAFC",
+
+  // Status semantic colors
+  success: "#10B981", // Emerald 500
+  onSuccess: "#FFFFFF",
+  warning: "#F59E0B", // Amber 500
+  onWarning: "#0F172A",
+  error: "#EF4444", // Red 500
+  onError: "#FFFFFF",
+  info: "#38BDF8", // Sky 400
+  onInfo: "#0F172A",
+  successSoft: "#064E3B",
+  warningSoft: "#78350F",
+  errorSoft: "#7F1D1D",
+
+  // Lines & borders
+  border: "#1E293B", // slate-800
+  borderStrong: "#334155", // slate-700
+  divider: "#1E293B",
+};
+
 export type ThemeColors = typeof light;
 
 export const defaultScheme = "light" satisfies ColorScheme;
 
-export const themes: { light: ThemeColors; dark?: ThemeColors } = { light };
+export const themes: { light: ThemeColors; dark: ThemeColors } = { light, dark };
 
 // In-app theme toggle, only after `dark` exists in `themes`. Call
 // setColorScheme("dark"), setColorScheme("light"), or setColorScheme(null) to
@@ -93,11 +134,11 @@ export function setColorScheme(scheme: ColorScheme | null) {
 // Keep native surfaces (alerts, pickers, navigation chrome) on the schemes this
 // app ships: light only forces light; once `dark` exists the device decides.
 // Optional call because react-native-web does not implement it.
-setColorScheme?.(themes.dark ? null : defaultScheme);
+setColorScheme?.(null);
 
 export function useTheme(): { scheme: ColorScheme; colors: ThemeColors } {
   const system = useColorScheme();
-  const scheme: ColorScheme = system === "dark" && themes.dark ? "dark" : defaultScheme;
+  const scheme: ColorScheme = system === "dark" ? "dark" : "light";
   return { scheme, colors: themes[scheme] ?? themes.light };
 }
 

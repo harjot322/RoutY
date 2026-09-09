@@ -22,8 +22,8 @@ const CACHE_KEY = "routy_last_snapshot";
 export function LiveProvider({ children }: { children: React.ReactNode }) {
   const qc = useQueryClient();
   const [wsOk, setWsOk] = useState(false);
-  const [status, setStatus] = useState<ConnStatus>("connecting");
-  const [receivedAt, setReceivedAt] = useState(0);
+  const [wsReceivedAt, setWsReceivedAt] = useState(0);
+  const [isStale, setIsStale] = useState(false);
   const [cached, setCached] = useState<LiveSnapshot | null>(null);
   const [trackedBusId, setTrackedBusIdState] = useState<string | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
@@ -48,20 +48,16 @@ export function LiveProvider({ children }: { children: React.ReactNode }) {
     storage.getItem("routy_tracked_bus", "").then((v) => v && setTrackedBusIdState(v as string));
   }, []);
 
+  // Save latest snapshot to cache periodically
   useEffect(() => {
     if (query.data) {
-      setReceivedAt(Date.now());
-      setStatus("live");
-      if (Date.now() - lastSave.current > 10000) {
-        lastSave.current = Date.now();
+      const now = Date.now();
+      if (now - lastSave.current > 10000) {
+        lastSave.current = now;
         storage.setItem(CACHE_KEY, JSON.stringify(query.data));
       }
     }
   }, [query.data]);
-
-  useEffect(() => {
-    if (query.isError && !wsOk) setStatus("offline");
-  }, [query.isError, wsOk]);
 
   // WebSocket realtime feed with automatic reconnect
   useEffect(() => {
@@ -78,6 +74,7 @@ export function LiveProvider({ children }: { children: React.ReactNode }) {
         ws.onmessage = (ev) => {
           try {
             const data = JSON.parse(ev.data as string) as LiveSnapshot;
+            setWsReceivedAt(Date.now());
             qc.setQueryData(["live"], data);
           } catch {}
         };
@@ -106,13 +103,21 @@ export function LiveProvider({ children }: { children: React.ReactNode }) {
     };
   }, [qc]);
 
+  const receivedAt = Math.max(query.dataUpdatedAt, wsReceivedAt);
+
   // Stale watchdog: if no data for 12s mark offline (keeps last known ETAs visible)
   useEffect(() => {
     const id = setInterval(() => {
-      if (receivedAt && Date.now() - receivedAt > 12000) setStatus("offline");
+      if (receivedAt > 0 && Date.now() - receivedAt > 12000) {
+        setIsStale(true);
+      } else if (receivedAt > 0) {
+        setIsStale(false);
+      }
     }, 3000);
     return () => clearInterval(id);
   }, [receivedAt]);
+
+  const status: ConnStatus = isStale || (query.isError && !wsOk) ? "offline" : (wsOk || query.data ? "live" : "connecting");
 
   const setTrackedBusId = (id: string | null) => {
     setTrackedBusIdState(id);

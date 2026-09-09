@@ -16,7 +16,11 @@ command -v node >/dev/null 2>&1 || { echo "Error: Node.js is required."; exit 1;
 echo ""
 echo "[1/2] Starting RoutY Backend Server (FastAPI + Simulation + In-Memory DB)..."
 cd "$DIR/backend"
-python3 -m uvicorn server:app --host 0.0.0.0 --port 8000 &
+PYTHON_BIN="python3"
+if [ -f "$DIR/backend/venv/bin/python3" ]; then
+  PYTHON_BIN="$DIR/backend/venv/bin/python3"
+fi
+"$PYTHON_BIN" -m uvicorn server:app --host 0.0.0.0 --port 8000 &
 BACKEND_PID=$!
 echo "Backend running (PID: $BACKEND_PID) on http://0.0.0.0:8000"
 

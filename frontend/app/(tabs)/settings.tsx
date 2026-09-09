@@ -6,8 +6,8 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { BigButton } from "@/src/components/BigButton";
 import { Icon } from "@/src/components/Icon";
 import { useLanguage } from "@/src/i18n/LanguageContext";
-import { makeStyles, useTheme } from "@/src/theme";
-import { announce } from "@/src/utils/speech";
+import { makeStyles, setColorScheme, useTheme } from "@/src/theme";
+import { announce, speakAssistantActivated } from "@/src/utils/speech";
 
 export default function SettingsScreen() {
   const insets = useSafeAreaInsets();
@@ -15,6 +15,16 @@ export default function SettingsScreen() {
   const styles = useStyles();
   const { colors } = useTheme();
   const router = useRouter();
+  const [themeMode, setThemeMode] = React.useState<"light" | "dark" | "system">("system");
+
+  const changeTheme = (mode: "light" | "dark" | "system") => {
+    setThemeMode(mode);
+    if (mode === "system") {
+      setColorScheme(null);
+    } else {
+      setColorScheme(mode);
+    }
+  };
 
   return (
     <View style={styles.root} testID="settings-screen">
@@ -22,6 +32,7 @@ export default function SettingsScreen() {
         <Text style={styles.title}>{t("tabSettings")}</Text>
       </View>
       <ScrollView contentContainerStyle={{ padding: 16, gap: 16, paddingBottom: 24 }}>
+        {/* Language Selection */}
         <View style={styles.card}>
           <View style={styles.rowHead}>
             <Icon name="translate" size={26} color={colors.brandPrimary} />
@@ -37,6 +48,26 @@ export default function SettingsScreen() {
           </View>
         </View>
 
+        {/* Display / Appearance Mode */}
+        <View style={styles.card}>
+          <View style={styles.rowHead}>
+            <Icon name="theme-light-dark" size={26} color={colors.brandPrimary} />
+            <Text style={styles.cardTitle}>{t("theme")}</Text>
+          </View>
+          <View style={styles.langRow}>
+            <Pressable testID="theme-light-btn" onPress={() => changeTheme("light")} style={[styles.langBtn, themeMode === "light" && styles.langBtnActive]}>
+              <Text style={[styles.themeOptionText, themeMode === "light" && styles.langTextActive]}>{t("themeLight")}</Text>
+            </Pressable>
+            <Pressable testID="theme-dark-btn" onPress={() => changeTheme("dark")} style={[styles.langBtn, themeMode === "dark" && styles.langBtnActive]}>
+              <Text style={[styles.themeOptionText, themeMode === "dark" && styles.langTextActive]}>{t("themeDark")}</Text>
+            </Pressable>
+            <Pressable testID="theme-system-btn" onPress={() => changeTheme("system")} style={[styles.langBtn, themeMode === "system" && styles.langBtnActive]}>
+              <Text style={[styles.themeOptionText, themeMode === "system" && styles.langTextActive]}>{t("themeSystem")}</Text>
+            </Pressable>
+          </View>
+        </View>
+
+        {/* Audio Announcements */}
         <View style={styles.card}>
           <View style={styles.rowBetween}>
             <View style={styles.rowHead}>
@@ -49,7 +80,10 @@ export default function SettingsScreen() {
             <Switch
               testID="audio-toggle"
               value={audio}
-              onValueChange={setAudio}
+              onValueChange={(val) => {
+                setAudio(val);
+                if (val) speakAssistantActivated(lang);
+              }}
               trackColor={{ true: colors.brandPrimary, false: colors.surfaceTertiary }}
               thumbColor={colors.surface}
             />
@@ -59,17 +93,28 @@ export default function SettingsScreen() {
             label={t("testVoice")}
             icon="play"
             variant="secondary"
-            onPress={() => announce(t("announcement", { r: "R2", m: 2, s: lang === "hi" ? "बाराबंकी बस स्टैंड" : "Barabanki Bus Stand" }), lang)}
+            onPress={() => speakAssistantActivated(lang)}
           />
         </View>
 
+        {/* How It Works Link */}
+        <Pressable style={styles.adminRow} onPress={() => router.push("/(tabs)/map")} testID="how-it-works-link">
+          <Icon name="help-circle-outline" size={26} color={colors.brandPrimary} />
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text style={[styles.adminText, { color: colors.onSurface }]}>{t("howItWorks")}</Text>
+            <Text style={styles.sub}>{t("howItWorksSubtitle")}</Text>
+          </View>
+          <Icon name="chevron-right" size={24} color={colors.muted} />
+        </Pressable>
+
+        {/* Platform Information */}
         <View style={styles.card}>
           <View style={styles.rowHead}>
             <Icon name="information-outline" size={26} color={colors.brandPrimary} />
             <Text style={styles.cardTitle}>{t("appName")}</Text>
           </View>
           <Text style={styles.about}>{t("about")}</Text>
-          <Text style={styles.sub}>{t("version")}</Text>
+          <Text style={styles.sub}>RoutY Core Engine v2.4.0 · Production Transit Build</Text>
         </View>
 
         <Pressable style={styles.adminRow} onPress={() => router.push("/suggest")} testID="suggest-route-link">
@@ -108,6 +153,7 @@ const useStyles = makeStyles((colors) => ({
   langBtnActive: { borderColor: colors.brandPrimary, backgroundColor: colors.brandPrimary },
   langText: { fontSize: 20, fontWeight: "800", color: colors.onSurface },
   langTextActive: { color: colors.onBrandPrimary },
+  themeOptionText: { fontSize: 15, fontWeight: "800", color: colors.onSurface },
   about: { fontSize: 15, color: colors.onSurfaceSecondary, lineHeight: 22 },
   adminRow: { flexDirection: "row", alignItems: "center", gap: 12, minHeight: 64, paddingHorizontal: 16, borderRadius: 12, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface },
   adminText: { fontSize: 16, fontWeight: "700", color: colors.muted },

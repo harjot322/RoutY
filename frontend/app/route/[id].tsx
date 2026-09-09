@@ -27,21 +27,17 @@ export default function RouteDetailScreen() {
   const router = useRouter();
   const { setTrackedBusId, trackedBusId } = useLive();
   const fav = useFavourites();
-  const [receivedAt, setReceivedAt] = useState(Date.now());
-  const [tick, setTick] = useState(0);
+  const [now, setNow] = useState(0);
   const [sheetIdx, setSheetIdx] = useState<number | null>(null);
   const [fareOpen, setFareOpen] = useState(false);
   const [fareFrom, setFareFrom] = useState<string | null>(null);
 
   const q = useQuery({ queryKey: ["route", id], queryFn: () => api.route(id as string), refetchInterval: 3000, enabled: !!id });
   useEffect(() => {
-    if (q.data) setReceivedAt(Date.now());
-  }, [q.data]);
-  useEffect(() => {
-    const i = setInterval(() => setTick((x) => x + 1), 1000);
+    const i = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(i);
   }, []);
-  const elapsed = Math.floor((Date.now() - receivedAt) / 1000) + tick * 0;
+  const elapsed = now > 0 && q.dataUpdatedAt ? Math.max(0, Math.floor((now - q.dataUpdatedAt) / 1000)) : 0;
 
   const r = q.data;
   const mapRoutes = useMemo(() => (r ? [{ id: r.id, color: r.color, number: r.number, path: r.path.coordinates, stops: r.stops }] : []), [r]);
