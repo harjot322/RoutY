@@ -10,8 +10,8 @@ load_dotenv(Path(__file__).resolve().parents[2] / "frontend" / ".env")
 
 BASE_URL = os.environ.get("EXPO_PUBLIC_BACKEND_URL") or os.environ.get("EXPO_BACKEND_URL") or "http://127.0.0.1:8000"
 BASE_URL = BASE_URL.rstrip("/")
-ADMIN_USER = "admin"
-ADMIN_PASS = "RoutYAdmin2026Secure"
+ADMIN_USER = os.environ.get("ADMIN_USERNAME", "admin")
+ADMIN_PASS = os.environ.get("ADMIN_PASSWORD", "admin")
 
 @pytest.fixture(scope="session")
 def s():
