@@ -1148,17 +1148,23 @@ class Engine:
                     existing_doc["city"] = r.get("city", "")
                     await db.routes.update_one({"number": r["number"]}, {"$set": {"state": r.get("state", ""), "city": r.get("city", "")}})
         logger.info("Seeded %d routes", len(routes))
-        for r in routes:
-            if snap_fn and r.get("path_source") != "osrm":
-                try:
-                    coords, snapped = await snap_fn([[s["lng"], s["lat"]] for s in r["stops"]])
-                    apply_road_path(r, coords, snapped)
-                    await db.routes.update_one({"id": r["id"]}, {"$set": {"path": r["path"], "stops": r["stops"], "length_m": r["length_m"], "path_source": "osrm"}})
-                    logger.info("Snapped route %s to roads (%d pts)", r["number"], len(coords))
-                except Exception as exc:
-                    logger.warning("OSRM snap failed for %s: %s", r["number"], exc)
+        if snap_fn:
+            sem = asyncio.Semaphore(10)
 
-            # Allocate 3 to 8 buses depending on route length and number of stops
+            async def _snap(r):
+                if r.get("path_source") != "osrm":
+                    async with sem:
+                        try:
+                            coords, snapped = await snap_fn([[s["lng"], s["lat"]] for s in r["stops"]])
+                            apply_road_path(r, coords, snapped)
+                            await db.routes.update_one({"id": r["id"]}, {"$set": {"path": r["path"], "stops": r["stops"], "length_m": r["length_m"], "path_source": "osrm"}})
+                            logger.info("Snapped route %s to roads (%d pts)", r["number"], len(coords))
+                        except Exception as exc:
+                            logger.warning("OSRM snap failed for %s: %s", r["number"], exc)
+
+            await asyncio.gather(*[_snap(r) for r in routes])
+
+        for r in routes:
             stops_count = len(r.get("stops", []))
             if stops_count <= 4:
                 b_count = 3
