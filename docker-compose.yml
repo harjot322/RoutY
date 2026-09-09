@@ -1,0 +1,28 @@
+services:
+  routy:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: routy-app
+    ports:
+      - "8000:8000"
+    environment:
+      - PORT=8000
+      - PYTHONUNBUFFERED=1
+      # RoutY automatically operates with an in-memory data store when MONGO_URL is omitted.
+      # To connect to external MongoDB, set MONGO_URL or enable the mongo service below:
+      # - MONGO_URL=mongodb://mongo:27017/routy
+      # - DB_NAME=routy
+    restart: unless-stopped
+  # Optional persistent database service
+  # mongo:
+  #   image: mongo:7.0
+  #   container_name: routy-mongo
+  #   restart: unless-stopped
+  #   ports:
+  #     - "27017:27017"
+  #   volumes:
+  #     - mongo_data:/data/db
+
+  # volumes:
+  #   mongo_data:

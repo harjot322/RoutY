@@ -1,0 +1,78 @@
+name: Default Branch CI & Build
+
+on:
+  push:
+    branches:
+      - master
+      - main
+
+jobs:
+  backend-test:
+    name: Backend Pytest Suite
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install Python Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r backend/requirements.txt
+
+      - name: Run Backend Tests
+        run: |
+          python -m uvicorn server:app --app-dir backend --host 127.0.0.1 --port 8000 &
+          sleep 3
+          python -m pytest backend/tests -v
+
+  frontend-check:
+    name: Frontend TypeScript Verification
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'yarn'
+          cache-dependency-path: frontend/yarn.lock
+
+      - name: Install Frontend Dependencies
+        working-directory: frontend
+        run: |
+          yarn install --frozen-lockfile || yarn install
+
+      - name: Strict TypeScript Compilation Check
+        working-directory: frontend
+        run: |
+          npx tsc --noEmit
+
+  docker-build:
+    name: All-in-One Docker Image Build Check
+    needs: [backend-test, frontend-check]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Container Image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          push: false
+          tags: routy:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
