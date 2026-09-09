@@ -18,6 +18,7 @@ COPY frontend/ ./
 # Export production static web distribution
 ENV CI=1
 ENV NODE_ENV=production
+ENV EXPO_NO_TELEMETRY=1
 RUN npx expo export -p web --output-dir dist
 
 # --- Stage 2: Production Runtime (FastAPI + Embedded Simulation & Static Web) ---

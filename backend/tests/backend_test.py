@@ -17,8 +17,7 @@ from dotenv import load_dotenv
 load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 load_dotenv(Path(__file__).resolve().parents[2] / "frontend" / ".env")
 
-BASE_URL = os.environ.get("EXPO_PUBLIC_BACKEND_URL") or os.environ.get("EXPO_BACKEND_URL")
-assert BASE_URL, "EXPO_PUBLIC_BACKEND_URL missing"
+BASE_URL = os.environ.get("EXPO_PUBLIC_BACKEND_URL") or os.environ.get("EXPO_BACKEND_URL") or "http://127.0.0.1:8000"
 BASE_URL = BASE_URL.rstrip("/")
 WS_URL = BASE_URL.replace("https://", "wss://").replace("http://", "ws://") + "/api/ws/live"
 

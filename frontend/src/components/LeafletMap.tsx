@@ -10,7 +10,7 @@ export function LeafletMap(props: LeafletMapProps) {
   const [ready, setReady] = useState(false);
   const styles = useStyles();
   const { colors } = useTheme();
-  const { onBusPress, onStopPress } = props;
+  const { onBusPress, onStopPress, onRoutePress } = props;
 
   const send = useCallback((msg: object) => {
     ref.current?.injectJavaScript(`window.__rx(${JSON.stringify(JSON.stringify(msg))}); true;`);
@@ -33,6 +33,7 @@ export function LeafletMap(props: LeafletMapProps) {
             if (d.type === "ready") setReady(true);
             else if (d.type === "busTap") onBusPress?.(d.id);
             else if (d.type === "stopTap") onStopPress?.(d.id, d.routeId);
+            else if (d.type === "routeTap") onRoutePress?.(d.id);
           } catch {}
         }}
       />

@@ -27,10 +27,32 @@ jobs:
           pip install -r backend/requirements.txt
 
       - name: Run Backend Tests
+        env:
+          EXPO_PUBLIC_BACKEND_URL: http://127.0.0.1:8000
         run: |
           python -m uvicorn server:app --app-dir backend --host 127.0.0.1 --port 8000 &
-          sleep 3
+          SERVER_PID=$!
+
+          # Wait for server to be ready
+          max_attempts=30
+          attempt=0
+          while [ $attempt -lt $max_attempts ]; do
+            if curl -s http://127.0.0.1:8000/api/routes > /dev/null 2>&1; then
+              echo "Server is ready (took ${attempt}s)"
+              break
+            fi
+            attempt=$((attempt + 1))
+            sleep 1
+          done
+
+          if [ $attempt -eq $max_attempts ]; then
+            echo "Server failed to start within 30 seconds"
+            kill $SERVER_PID 2>/dev/null || true
+            exit 1
+          fi
+
           python -m pytest backend/tests -v
+          kill $SERVER_PID 2>/dev/null || true
 
   frontend-check:
     name: Frontend TypeScript Verification

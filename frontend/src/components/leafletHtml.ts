@@ -1,6 +1,18 @@
 import { useEffect } from "react";
 
-export type MapRoute = { id: string; color: string; number: string; path: [number, number][]; stops: { id: string; name: string; lat: number; lng: number }[] };
+export type MapRoute = {
+  id: string;
+  color: string;
+  number: string;
+  name?: string;
+  name_hi?: string;
+  path: [number, number][];
+  stops: { id: string; name: string; lat: number; lng: number; name_hi?: string }[];
+  state?: string;
+  origin?: string;
+  destination?: string;
+  length_m?: number;
+};
 export type MapBus = {
   id: string;
   lat: number;
@@ -35,6 +47,7 @@ export type LeafletMapProps = {
   showStops?: boolean;
   onBusPress?: (id: string) => void;
   onStopPress?: (stopId: string, routeId: string) => void;
+  onRoutePress?: (id: string) => void;
   style?: any;
   testID?: string;
 };
@@ -109,26 +122,19 @@ html,body,#map{margin:0;padding:0;height:100%;width:100%;background:#F8FAFC;font
 <script>
 var map=L.map('map',{zoomControl:false,attributionControl:true,maxZoom:21}).setView([26.93,81.2],11);
 var currentTileLayer=null;
+var currentTileScheme='';
 function updateTheme(t){
-  // Always crisp light mode tiles when viewed by users
-  var tileUrl='https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png';
-  if('${CARTO_KEY}')tileUrl+='?key=${CARTO_KEY}';
+  if(currentTileLayer && currentTileScheme === t) return;
+  currentTileScheme = t;
+  var tileUrl='https://tile.openstreetmap.org/{z}/{x}/{y}.png';
   if(currentTileLayer){
     currentTileLayer.setUrl(tileUrl);
   }else{
     currentTileLayer=L.tileLayer(tileUrl,{
-      maxNativeZoom:18,
+      maxNativeZoom:19,
       maxZoom:21,
-      subdomains:'abcd',
-      attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
+      attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
     }).addTo(map);
-    currentTileLayer.on('tileerror',function(e){
-      if(e.tile&&!e.tile._fallback){
-        e.tile._fallback=true;
-        var c=e.coords;
-        e.tile.src='https://tile.openstreetmap.org/'+c.z+'/'+c.x+'/'+c.y+'.png';
-      }
-    });
   }
   var el=document.getElementById('map');if(el)el.style.background='#F8FAFC';
 }
@@ -189,9 +195,11 @@ function setRoutes(rs,hl){
     var isDim=hl&&hl!==r.id;
     
     // Road casing (darker backdrop line for high contrast)
-    L.polyline(ll,{color:'#0F172A',weight:isHl?8:(isDim?3:6),opacity:isDim?0.15:0.35,lineCap:'round',lineJoin:'round'}).addTo(casingLayer);
+    var casing = L.polyline(ll,{color:'#0F172A',weight:isHl?9:(isDim?3:6),opacity:isDim?0.15:0.4,lineCap:'round',lineJoin:'round'}).addTo(casingLayer);
     // Main colored route line
-    L.polyline(ll,{color:r.color,weight:isHl?6:(isDim?2:4.5),opacity:isDim?0.25:0.95,lineCap:'round',lineJoin:'round'}).addTo(routeLayer);
+    var line = L.polyline(ll,{color:r.color,weight:isHl?7:(isDim?2:4.5),opacity:isDim?0.25:0.95,lineCap:'round',lineJoin:'round'}).addTo(routeLayer);
+    casing.on('click',function(){post({type:'routeTap',id:r.id})});
+    line.on('click',function(){post({type:'routeTap',id:r.id})});
     
     r.stops.forEach(function(s){
       var nodeHtml='<div class="stop-node" style="border-color:'+r.color+'"></div>';
