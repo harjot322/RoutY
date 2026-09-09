@@ -2,6 +2,8 @@
 
 RoutY is an operational, real-time civic public transport tracking and commuter guidance platform built with **FastAPI** (Python telemetry and transit engine) and **React Native / Expo** (cross-platform mobile application).
 
+> 📖 **Deep-Dive Application Guide**: For an exhaustive overview of the platform's vision, system architecture, detailed technology stack analysis, and in-depth real-world use cases, see [**APPLICATION_OVERVIEW.md**](file:///Users/harjotmakkar/Agentic/RoutY/APPLICATION_OVERVIEW.md).
+
 ---
 
 ## 📑 Table of Contents

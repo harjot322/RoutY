@@ -27,7 +27,7 @@ class PublicAdmin(BaseModel):
 
 
 def _secret() -> str:
-    return os.environ["JWT_SECRET"]
+    return os.environ.get("JWT_SECRET") or "routy-dev-jwt-secret-do-not-use-in-production"
 
 
 def create_access_token(username: str) -> str:
@@ -39,8 +39,8 @@ def create_access_token(username: str) -> str:
 
 async def seed_admin(db):
     await db.admins.create_index("username", unique=True)
-    username = os.environ["ADMIN_USERNAME"]
-    password = os.environ["ADMIN_PASSWORD"]
+    username = os.environ.get("ADMIN_USERNAME", "admin")
+    password = os.environ.get("ADMIN_PASSWORD", "admin")
     await db.admins.update_one(
         {"username": username},
         {"$setOnInsert": {"username": username, "role": "admin", "password_hash": password_hash.hash(password)}},

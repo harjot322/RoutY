@@ -13,7 +13,7 @@ from starlette.testclient import TestClient
 from server import app, engine, db
 
 ADMIN_USER = os.environ.get("ADMIN_USERNAME", "admin")
-ADMIN_PASS = os.environ.get("ADMIN_PASSWORD", "RoutYAdmin2026Secure")
+ADMIN_PASS = os.environ.get("ADMIN_PASSWORD", "admin")
 
 @pytest.fixture(scope="module")
 def client():

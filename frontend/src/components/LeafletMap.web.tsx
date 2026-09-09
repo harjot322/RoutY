@@ -8,7 +8,7 @@ export function LeafletMap(props: LeafletMapProps) {
   const ref = useRef<HTMLIFrameElement | null>(null);
   const [ready, setReady] = useState(false);
   const styles = useStyles();
-  const { onBusPress, onStopPress } = props;
+  const { onBusPress, onStopPress, onRoutePress } = props;
 
   const send = useCallback((msg: object) => {
     ref.current?.contentWindow?.postMessage(JSON.stringify(msg), "*");
@@ -23,26 +23,33 @@ export function LeafletMap(props: LeafletMapProps) {
         if (d.type === "ready") setReady(true);
         else if (d.type === "busTap") onBusPress?.(d.id);
         else if (d.type === "stopTap") onStopPress?.(d.id, d.routeId);
+        else if (d.type === "routeTap") onRoutePress?.(d.id);
       } catch {}
     };
     window.addEventListener("message", handler);
     return () => window.removeEventListener("message", handler);
-  }, [onBusPress, onStopPress]);
+  }, [onBusPress, onStopPress, onRoutePress]);
 
-  return (
-    <View style={[styles.wrap, props.style ?? styles.fill]} testID={props.testID ?? "leaflet-map"}>
-      {React.createElement("iframe", {
+  const iframeElement = React.useMemo(
+    () =>
+      React.createElement("iframe", {
         ref,
         srcDoc: MAP_HTML,
         style: { border: 0, width: "100%", height: "100%", display: "block" },
         title: "map",
         sandbox: "allow-scripts allow-same-origin",
-      })}
+      }),
+    [],
+  );
+
+  return (
+    <View style={[styles.wrap, props.style ?? styles.fill]} testID={props.testID ?? "leaflet-map"}>
+      {iframeElement}
     </View>
   );
 }
 
 const useStyles = makeStyles((colors) => ({
-  wrap: { backgroundColor: colors.surfaceTertiary, overflow: "hidden" },
-  fill: { flex: 1 },
+  wrap: { backgroundColor: colors.surfaceTertiary, overflow: "hidden", width: "100%", height: "100%" },
+  fill: { flex: 1, width: "100%", height: "100%" },
 }));

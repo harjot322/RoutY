@@ -48,6 +48,7 @@ export default function MapScreen() {
   const [selectedStopId, setSelectedStopId] = useState<string | null>(null);
   const [upcomingStopsExpanded, setUpcomingStopsExpanded] = useState(false);
   const [sheetExpanded, setSheetExpanded] = useState(false);
+  const [routeStopsExpanded, setRouteStopsExpanded] = useState(false);
   const prevNearbyOrderRef = useRef<string[]>([]);
 
   const { favourites } = useFavourites();
@@ -115,16 +116,20 @@ export default function MapScreen() {
       id: r.id,
       color: r.color,
       number: r.number,
+      name: r.name,
+      name_hi: r.name_hi,
       path: r.path.coordinates,
       stops: r.stops,
       state: r.state,
+      origin: r.origin,
+      destination: r.destination,
+      length_m: r.length_m,
     }));
     if (selectedState !== "All States") {
       all = all.filter((r) => (r.state || "").toLowerCase() === selectedState.toLowerCase());
     }
-    if (!routeFilter) return all;
-    return all.filter((r) => r.id === routeFilter);
-  }, [routesQ.data, routeFilter, selectedState]);
+    return all;
+  }, [routesQ.data, selectedState]);
 
   const mapBuses = useMemo<MapBus[]>(() => {
     let all = (snapshot?.buses ?? []).map((b) => ({
@@ -263,9 +268,29 @@ export default function MapScreen() {
       setSelectedStopId(null);
       setFavId(null);
       setSheetExpanded(true);
+      const b = (snapshot?.buses ?? []).find((x) => x.id === id);
+      if (b) {
+        setFocus({ lat: b.lat, lng: b.lng, zoom: 15 });
+      }
       if (Platform.OS !== "web") Haptics.selectionAsync();
     },
-    [setTrackedBusId],
+    [setTrackedBusId, snapshot?.buses],
+  );
+
+  const onRoutePress = useCallback(
+    (routeId: string) => {
+      setRouteFilter(routeId);
+      setTrackedBusId(null);
+      setSelectedStopId(null);
+      setFavId(null);
+      setSheetExpanded(true);
+      const r = (routesQ.data ?? []).find((x) => x.id === routeId);
+      if (r && r.stops && r.stops.length) {
+        setFocus({ lat: r.stops[0].lat, lng: r.stops[0].lng, zoom: 13 });
+      }
+      if (Platform.OS !== "web") Haptics.selectionAsync();
+    },
+    [routesQ.data, setTrackedBusId],
   );
 
   const onStopPress = useCallback(
@@ -333,6 +358,15 @@ export default function MapScreen() {
   const favBest = favStop?.arrivals.find((a) => a.best)?.best ?? null;
 
   const currentBusData = trackedQ.data ?? trackedBus;
+  const selectedRoute = useMemo(() => {
+    if (!routeFilter) return null;
+    return (routesQ.data ?? []).find((r) => r.id === routeFilter) ?? null;
+  }, [routeFilter, routesQ.data]);
+
+  const selectedRouteBuses = useMemo(() => {
+    if (!routeFilter || !snapshot?.buses) return [];
+    return snapshot.buses.filter((b) => b.route_id === routeFilter);
+  }, [routeFilter, snapshot?.buses]);
 
   return (
     <View style={styles.root} testID="map-screen">
@@ -345,6 +379,7 @@ export default function MapScreen() {
         showStops={showStops}
         onBusPress={onBusPress}
         onStopPress={onStopPress}
+        onRoutePress={onRoutePress}
         highlightRouteId={trackedBus?.route_id ?? routeFilter ?? null}
       />
 
@@ -433,10 +468,7 @@ export default function MapScreen() {
                   if (active) {
                     setRouteFilter(null);
                   } else {
-                    setRouteFilter(r.id);
-                    if (r.stops.length) {
-                      setFocus({ lat: r.stops[0].lat, lng: r.stops[0].lng, zoom: 12 });
-                    }
+                    onRoutePress(r.id);
                   }
                 }}
                 testID={`filter-route-${r.number}`}
@@ -540,11 +572,13 @@ export default function MapScreen() {
               <Text style={styles.sheetHandleSummary} numberOfLines={1}>
                 {sheetExpanded
                   ? (lang === "hi" ? "संक्षिप्त दृश्य के लिए टैप करें" : "Tap to collapse")
-                  : (currentBusData
-                      ? `${currentBusData.plate} · ${t("toward", { t: tr(currentBusData.terminus, currentBusData.terminus_hi) })}`
-                      : nearbyBuses.length > 0
-                        ? (lang === "hi" ? `${nearbyBuses.length} बसें सक्रिय · पूरा विवरण देखने के लिए टैप करें` : `${nearbyBuses.length} active buses · Tap to expand`)
-                        : (lang === "hi" ? "पूरा विवरण देखने के लिए टैप करें" : "Tap to expand transit details"))}
+                  : currentBusData
+                    ? `${currentBusData.route_number} · ${currentBusData.plate} · ${t("toward", { t: tr(currentBusData.terminus, currentBusData.terminus_hi) })}`
+                    : selectedRoute
+                      ? `Route ${selectedRoute.number} · ${tr(selectedRoute.name, selectedRoute.name_hi)} · ${selectedRouteBuses.length} active`
+                      : selectedStop
+                        ? `${tr(selectedStop.name, selectedStop.name_hi)} · ${t("stops")}`
+                        : (lang === "hi" ? "मार्ग और लाइव बसें देखने के लिए टैप करें" : "Tap to explore transit routes & buses")}
               </Text>
               <Icon name={sheetExpanded ? "chevron-down" : "chevron-up"} size={18} color={colors.brandPrimary} />
             </View>
@@ -569,6 +603,28 @@ export default function MapScreen() {
                   </Text>
                 </View>
                 <Pressable onPress={() => setTrackedBusId(null)} style={styles.iconBtn} testID="stop-tracking-button">
+                  <Icon name="close-circle" size={24} color={colors.muted} />
+                </Pressable>
+              </View>
+            ) : selectedRoute ? (
+              <View style={styles.peekRow} testID="selected-route-peek">
+                <View style={[styles.routeBadgeSmall, { backgroundColor: selectedRoute.color, width: 38, height: 38, borderRadius: 10 }]}>
+                  <Text style={[styles.routeBadgeSmallText, { fontSize: 13 }]}>{selectedRoute.number}</Text>
+                </View>
+                <View style={{ flex: 1, minWidth: 0 }}>
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                    <Text style={styles.peekTitle} numberOfLines={1}>Route {selectedRoute.number}</Text>
+                    <View style={[styles.statusPillSmall, { backgroundColor: colors.surfaceTertiary }]}>
+                      <Text style={[styles.statusPillSmallText, { color: colors.brandPrimary }]}>
+                        {selectedRouteBuses.length} live
+                      </Text>
+                    </View>
+                  </View>
+                  <Text style={styles.cardSub} numberOfLines={1}>
+                    {tr(selectedRoute.name, selectedRoute.name_hi)}
+                  </Text>
+                </View>
+                <Pressable onPress={() => setRouteFilter(null)} style={styles.iconBtn} testID="close-selected-route">
                   <Icon name="close-circle" size={24} color={colors.muted} />
                 </Pressable>
               </View>
@@ -614,38 +670,27 @@ export default function MapScreen() {
                 </Pressable>
               </View>
             ) : (
-              <View style={styles.peekRow} testID="nearest-stop-peek">
-                <View style={[styles.stopIconWrap, { width: 38, height: 38, borderRadius: 19 }]}>
-                  <Icon name="bus-stop" size={20} color={colors.onSurface} />
+              <View style={styles.peekRow} testID="transit-hub-peek">
+                <View style={[styles.stopIconWrap, { width: 38, height: 38, borderRadius: 19, backgroundColor: colors.surfaceTertiary }]}>
+                  <Icon name="bus-multiple" size={20} color={colors.brandPrimary} />
                 </View>
                 <View style={{ flex: 1, minWidth: 0 }}>
-                  <Text style={styles.label}>{t("nearestStop")}</Text>
-                  <Text style={styles.peekTitle} numberOfLines={1} testID="nearest-stop-name">
-                    {nearest ? (lang === "hi" ? nearest.name_hi || nearest.name : nearest.name) : (nearbyBuses[0] ? `Route ${nearbyBuses[0].route_number}` : t("searching"))}
+                  <Text style={styles.label}>{selectedState === "All States" ? t("allStates") : selectedState}</Text>
+                  <Text style={styles.peekTitle} numberOfLines={1}>
+                    {selectedState === "All States" ? (lang === "hi" ? "अखिल भारतीय ट्रांजिट" : "All-India Transit Hub") : `${selectedState} Corridors`}
                   </Text>
                   <Text style={styles.cardSub} numberOfLines={1}>
-                    {distToStop != null ? `${fmtDistance(distToStop, lang)} · ` : ""}
-                    {etaForStop != null ? `${t("nextBus")}: ${fmtEta(etaForStop, lang)}` : `${nearbyBuses.length} active buses`}
+                    {mapBuses.length} {t("liveBuses", { n: mapBuses.length })} · {mapRoutes.length} corridors
                   </Text>
                 </View>
-                {nearest?.best && !trackedBus ? (
-                  <Pressable
-                    style={styles.peekTrackBtn}
-                    onPress={() => setTrackedBusId(nearest.best!.bus_id)}
-                    testID="track-nearest-bus-button"
-                  >
-                    <Icon name="bus-marker" size={16} color="#FFFFFF" />
-                    <Text style={styles.peekTrackBtnText}>{nearest.route_number}</Text>
-                  </Pressable>
-                ) : nearbyBuses.length > 0 ? (
-                  <Pressable
-                    style={[styles.peekTrackBtn, { backgroundColor: colors.surfaceTertiary }]}
-                    onPress={() => setSheetExpanded(true)}
-                  >
-                    <Icon name="radar" size={16} color={colors.brandPrimary} />
-                    <Text style={[styles.peekTrackBtnText, { color: colors.brandPrimary }]}>{nearbyBuses.length}</Text>
-                  </Pressable>
-                ) : null}
+                <Pressable
+                  style={styles.peekTrackBtn}
+                  onPress={() => setSheetExpanded(true)}
+                  testID="explore-transit-btn"
+                >
+                  <Icon name="compass-outline" size={16} color="#FFFFFF" />
+                  <Text style={styles.peekTrackBtnText}>{lang === "hi" ? "देखें" : "Explore"}</Text>
+                </Pressable>
               </View>
             )
           ) : (
@@ -899,6 +944,189 @@ export default function MapScreen() {
                 </Pressable>
               </View>
             </View>
+          ) : selectedRoute ? (
+            /* Selected Route Rich Card */
+            <View style={{ gap: 14 }} testID="selected-route-card">
+              <View style={styles.cardHead}>
+                <View style={[styles.routeBadge, { backgroundColor: selectedRoute.color }]}>
+                  <Text style={styles.routeBadgeText}>{selectedRoute.number}</Text>
+                </View>
+                <View style={{ flex: 1, minWidth: 0 }}>
+                  <View style={styles.rowCenter}>
+                    <Text style={styles.cardTitle} numberOfLines={1}>
+                      Route {selectedRoute.number}
+                    </Text>
+                    {selectedRoute.state && (
+                      <View style={[styles.statusPillSmall, { backgroundColor: colors.surfaceTertiary }]}>
+                        <Text style={[styles.statusPillSmallText, { color: colors.brandPrimary }]}>
+                          {selectedRoute.state}
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+                  <Text style={styles.cardSub} numberOfLines={1}>
+                    {tr(selectedRoute.name, selectedRoute.name_hi)}
+                  </Text>
+                </View>
+                <Pressable onPress={() => setRouteFilter(null)} style={styles.iconBtn} testID="close-selected-route">
+                  <Icon name="close" size={22} color={colors.onSurface} />
+                </Pressable>
+              </View>
+
+              {/* Key Route Metrics */}
+              <View style={styles.statsRow}>
+                <View style={styles.statBox}>
+                  <Icon name="bus" size={16} color={colors.brandPrimary} />
+                  <Text style={styles.statBoxText}>{selectedRouteBuses.length} active</Text>
+                </View>
+                <View style={styles.statBox}>
+                  <Icon name="map-marker-multiple" size={16} color={colors.muted} />
+                  <Text style={styles.statBoxText}>{selectedRoute.stops.length} stops</Text>
+                </View>
+                <View style={styles.statBox}>
+                  <Icon name="map-marker-distance" size={16} color={colors.success} />
+                  <Text style={styles.statBoxText}>{fmtDistance(selectedRoute.length_m || 15000, lang)}</Text>
+                </View>
+              </View>
+
+              {/* Corridor Origin - Destination Visual */}
+              <View style={styles.corridorCard}>
+                <View style={styles.corridorRow}>
+                  <View style={styles.corridorPoint}>
+                    <Text style={styles.corridorLabel}>{lang === "hi" ? "आरंभ" : "Origin"}</Text>
+                    <Text style={styles.corridorName} numberOfLines={1}>
+                      {selectedRoute.origin || selectedRoute.stops[0]?.name || "Terminal A"}
+                    </Text>
+                  </View>
+                  <View style={styles.corridorArrowWrap}>
+                    <Icon name="arrow-right-bold" size={18} color={selectedRoute.color || colors.brandPrimary} />
+                  </View>
+                  <View style={[styles.corridorPoint, { alignItems: "flex-end" }]}>
+                    <Text style={styles.corridorLabel}>{lang === "hi" ? "गंतव्य" : "Destination"}</Text>
+                    <Text style={[styles.corridorName, { textAlign: "right" }]} numberOfLines={1}>
+                      {selectedRoute.destination || selectedRoute.stops[selectedRoute.stops.length - 1]?.name || "Terminal B"}
+                    </Text>
+                  </View>
+                </View>
+              </View>
+
+              {/* Live Buses Operating on this Route */}
+              <View style={styles.routeBusesSection}>
+                <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                    <Icon name="radar" size={16} color={colors.brandPrimary} />
+                    <Text style={styles.routeBusesTitle}>
+                      {lang === "hi" ? `इस रूट पर बसें (${selectedRouteBuses.length})` : `Active Buses on Route (${selectedRouteBuses.length})`}
+                    </Text>
+                  </View>
+                  <Text style={{ fontSize: 11, color: colors.muted, fontWeight: "700" }}>Live GPS</Text>
+                </View>
+                {selectedRouteBuses.length === 0 ? (
+                  <View style={[styles.howCard, { padding: 10, marginVertical: 2 }]}>
+                    <Icon name="information-outline" size={18} color={colors.muted} />
+                    <Text style={[styles.howDesc, { fontSize: 12 }]}>
+                      {lang === "hi" ? "अगली निर्धारित बस कुछ ही समय में रवाना होगी।" : "All buses on this corridor are in normal rotation. Next departure shortly."}
+                    </Text>
+                  </View>
+                ) : (
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingVertical: 2 }}>
+                    {selectedRouteBuses.map((b) => (
+                      <View key={b.id} style={styles.routeBusCard}>
+                        <View style={styles.routeBusHeader}>
+                          <Text style={styles.routeBusPlate} numberOfLines={1}>{b.plate}</Text>
+                          <Text style={styles.peekSpeed}>{b.speed_kmph} km/h</Text>
+                        </View>
+                        <Text style={{ fontSize: 11, color: colors.muted }} numberOfLines={1}>
+                          {b.next_stop ? `Next: ${tr(b.next_stop.name, b.next_stop.name_hi)}` : t("toward", { t: tr(b.terminus, b.terminus_hi) })}
+                        </Text>
+                        <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 4 }}>
+                          <Text style={{ fontSize: 10, color: colors.muted, fontWeight: "700" }}>
+                            {b.passengers_opted_in ?? 18}/{b.capacity ?? 42} seats
+                          </Text>
+                          <Pressable
+                            style={styles.routeBusTrackBtn}
+                            onPress={() => {
+                              if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                              setTrackedBusId(b.id);
+                              setFocus({ lat: b.lat, lng: b.lng, zoom: 15 });
+                            }}
+                            testID={`track-route-bus-${b.plate}`}
+                          >
+                            <Icon name="bus-marker" size={12} color="#FFFFFF" />
+                            <Text style={styles.routeBusTrackBtnText}>{t("track")}</Text>
+                          </Pressable>
+                        </View>
+                      </View>
+                    ))}
+                  </ScrollView>
+                )}
+              </View>
+
+              {/* Route Stops Sequence Accordion */}
+              {selectedRoute.stops && selectedRoute.stops.length > 0 && (
+                <View style={{ gap: 6 }}>
+                  <Pressable
+                    style={styles.routeStopsToggle}
+                    onPress={() => setRouteStopsExpanded((v) => !v)}
+                    testID="toggle-route-stops"
+                  >
+                    <Text style={styles.routeStopsToggleText}>
+                      {lang === "hi" ? `मार्ग के स्टॉप्स (${selectedRoute.stops.length})` : `Route Stops & Waypoints (${selectedRoute.stops.length})`}
+                    </Text>
+                    <Icon name={routeStopsExpanded ? "chevron-up" : "chevron-down"} size={18} color={colors.brandPrimary} />
+                  </Pressable>
+                  {routeStopsExpanded && (
+                    <ScrollView style={{ maxHeight: 180 }} showsVerticalScrollIndicator={false} testID="route-stops-list">
+                      {selectedRoute.stops.map((st, sIdx) => (
+                        <Pressable
+                          key={st.id || sIdx}
+                          style={styles.routeStopRow}
+                          onPress={() => {
+                            setSelectedStopId(st.id);
+                            setFocus({ lat: st.lat, lng: st.lng, zoom: 15 });
+                          }}
+                        >
+                          <View style={styles.routeStopDot}>
+                            <Text style={styles.routeStopDotText}>{sIdx + 1}</Text>
+                          </View>
+                          <View style={{ flex: 1, minWidth: 0 }}>
+                            <Text style={styles.routeStopName} numberOfLines={1}>
+                              {tr(st.name, st.name_hi)}
+                            </Text>
+                            {st.name_hi && lang !== "hi" && (
+                              <Text style={styles.routeStopSub} numberOfLines={1}>{st.name_hi}</Text>
+                            )}
+                          </View>
+                          <Icon name="chevron-right" size={16} color={colors.muted} />
+                        </Pressable>
+                      ))}
+                    </ScrollView>
+                  )}
+                </View>
+              )}
+
+              {/* Route Action Buttons */}
+              <View style={styles.actions}>
+                <BigButton
+                  testID="view-route-details-button"
+                  label={lang === "hi" ? "समय सारिणी और किराया देखें" : "View Timetable & Fare Info"}
+                  icon="calendar-clock"
+                  onPress={() => router.push(`/route/${selectedRoute.id}`)}
+                  style={{ flex: 1, minWidth: 0 }}
+                />
+                <Pressable
+                  style={styles.speakBtn}
+                  onPress={() => {
+                    if (selectedRoute.stops && selectedRoute.stops.length) {
+                      setFocus({ lat: selectedRoute.stops[0].lat, lng: selectedRoute.stops[0].lng, zoom: 13 });
+                    }
+                  }}
+                  testID="focus-route-button"
+                >
+                  <Icon name="crosshairs-gps" size={20} color={colors.onSurface} />
+                </Pressable>
+              </View>
+            </View>
           ) : selectedStop ? (
             /* 2. Selected Stop Details Sheet */
             <View style={{ gap: 12 }} testID="selected-stop-card">
@@ -1101,6 +1329,41 @@ export default function MapScreen() {
                   </View>
                 </>
               )}
+
+              {/* Browse Corridors Carousel */}
+              <View style={{ gap: 8, marginTop: 6 }}>
+                <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                    <Icon name="routes" size={18} color={colors.brandPrimary} />
+                    <Text style={styles.nearbySectionTitle}>
+                      {selectedState === "All States"
+                        ? (lang === "hi" ? "प्रमुख ट्रांजिट मार्ग" : "Transit Corridors")
+                        : `${selectedState} Corridors`}
+                    </Text>
+                  </View>
+                  <Text style={styles.nearbyCountText}>{mapRoutes.length} corridors</Text>
+                </View>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingVertical: 2 }}>
+                  {mapRoutes.map((r) => (
+                    <Pressable
+                      key={r.id}
+                      style={[styles.nearbyBusCard, { borderColor: r.color, width: 160 }]}
+                      onPress={() => onRoutePress(r.id)}
+                      testID={`corridor-chip-${r.number}`}
+                    >
+                      <View style={styles.nearbyCardTop}>
+                        <View style={[styles.routeBadgeSmall, { backgroundColor: r.color }]}>
+                          <Text style={styles.routeBadgeSmallText}>{r.number}</Text>
+                        </View>
+                        <Text style={[styles.nearbyDistText, { color: colors.muted }]}>{r.stops.length} stops</Text>
+                      </View>
+                      <Text style={styles.nearbyBusTerminus} numberOfLines={2}>
+                        {tr(r.name || r.number, r.name_hi)}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </ScrollView>
+              </View>
             </View>
           ) : (
             <Text style={styles.hint}>{t("searching")}</Text>
@@ -1754,4 +2017,123 @@ const useStyles = makeStyles((colors) => ({
   },
   cityPresetText: { fontSize: 14, fontWeight: "700", color: colors.onSurface },
   cityPresetCoords: { fontSize: 11, color: colors.muted, marginTop: 1 },
+  corridorCard: {
+    backgroundColor: colors.surfaceTertiary,
+    borderRadius: 14,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    gap: 8,
+  },
+  corridorRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  corridorPoint: {
+    flex: 1,
+  },
+  corridorLabel: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: colors.muted,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  corridorName: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: colors.onSurface,
+    marginTop: 2,
+  },
+  corridorArrowWrap: {
+    paddingHorizontal: 8,
+    alignItems: "center",
+  },
+  routeBusesSection: {
+    gap: 8,
+    marginTop: 4,
+  },
+  routeBusesTitle: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: colors.onSurface,
+  },
+  routeBusCard: {
+    width: 175,
+    backgroundColor: colors.surfaceTertiary,
+    borderRadius: 12,
+    padding: 10,
+    borderWidth: 1,
+    borderColor: colors.border,
+    gap: 6,
+  },
+  routeBusHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  routeBusPlate: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: colors.onSurface,
+  },
+  routeBusTrackBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: colors.brandPrimary,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  routeBusTrackBtnText: {
+    color: "#FFFFFF",
+    fontSize: 11,
+    fontWeight: "800",
+  },
+  routeStopsToggle: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 8,
+    borderTopWidth: 1,
+    borderTopColor: colors.divider,
+  },
+  routeStopsToggleText: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: colors.brandPrimary,
+  },
+  routeStopRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingVertical: 6,
+  },
+  routeStopDot: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: colors.surfaceTertiary,
+    borderWidth: 1.5,
+    borderColor: colors.brandPrimary,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  routeStopDotText: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: colors.brandPrimary,
+  },
+  routeStopName: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: "700",
+    color: colors.onSurface,
+  },
+  routeStopSub: {
+    fontSize: 11,
+    color: colors.muted,
+  },
 }));
