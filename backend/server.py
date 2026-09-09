@@ -97,6 +97,10 @@ class RouteIn(BaseModel):
     color: str = "#C04A00"
     stops: List[StopIn] = Field(min_length=2)
     bus_count: int = 2
+    origin: Optional[str] = None
+    destination: Optional[str] = None
+    path_coordinates: Optional[List[List[float]]] = None
+    path: Optional[dict] = None
 
 
 class RouteUpdate(BaseModel):
@@ -104,6 +108,25 @@ class RouteUpdate(BaseModel):
     name: Optional[str] = None
     name_hi: Optional[str] = None
     color: Optional[str] = None
+    origin: Optional[str] = None
+    destination: Optional[str] = None
+
+
+class BusCreateIn(BaseModel):
+    route_id: str
+    plate: Optional[str] = None
+    driver: Optional[str] = None
+    status: str = "in_service"
+    schedule: Optional[str] = None
+
+
+class BusUpdateIn(BaseModel):
+    plate: Optional[str] = None
+    driver: Optional[str] = None
+    status: Optional[str] = None
+    schedule: Optional[str] = None
+    occupancy: Optional[str] = None
+    route_id: Optional[str] = None
 
 
 class SearchIn(BaseModel):
@@ -152,15 +175,82 @@ class FindStopsIn(BaseModel):
     corridor_km: float = 3.0
 
 
+class DriverIn(BaseModel):
+    name: str
+    phone: str
+    conductor_name: Optional[str] = ""
+    conductor_phone: Optional[str] = ""
+    depot_address: Optional[str] = ""
+    route_id: Optional[str] = None
+    bus_id: Optional[str] = None
+    badge_id: Optional[str] = None
+    lat: Optional[float] = None
+    lng: Optional[float] = None
+    status: Optional[str] = "on_duty"
+
+
+class DriverUpdateIn(BaseModel):
+    name: Optional[str] = None
+    phone: Optional[str] = None
+    conductor_name: Optional[str] = None
+    conductor_phone: Optional[str] = None
+    depot_address: Optional[str] = None
+    lat: Optional[float] = None
+    lng: Optional[float] = None
+    status: Optional[str] = None
+    route_id: Optional[str] = None
+    bus_id: Optional[str] = None
+
+
+class ConvertSuggestionIn(BaseModel):
+    route_number: Optional[str] = None
+    color: Optional[str] = "#C04A00"
+    bus_count: int = 2
+    state: Optional[str] = None
+    city: Optional[str] = None
+
+
 # ------------------------------------------------------------------ public
 @api.get("/")
 async def root():
     return {"app": "RoutY", "status": "ok", "buses": len(engine.buses), "routes": len(engine.routes)}
 
 
+@api.get("/states")
+async def list_states():
+    routes = await db.routes.find({"active": True}, {"_id": 0}).to_list(500)
+    states_dict = {}
+    for r in routes:
+        st = r.get("state") or "National / Inter-City"
+        if st not in states_dict:
+            states_dict[st] = {"state": st, "cities": set(), "route_count": 0, "bus_count": 0}
+        if r.get("city"):
+            states_dict[st]["cities"].add(r["city"])
+        states_dict[st]["route_count"] += 1
+        states_dict[st]["bus_count"] += sum(1 for b in engine.buses.values() if b.route_id == r.get("id"))
+        if "sample_lat" not in states_dict[st] and r.get("stops") and len(r["stops"]) > 0:
+            states_dict[st]["sample_lat"] = r["stops"][0]["lat"]
+            states_dict[st]["sample_lng"] = r["stops"][0]["lng"]
+
+    result = []
+    for st, data in states_dict.items():
+        result.append({
+            "state": st,
+            "cities": sorted(list(data["cities"])),
+            "route_count": data["route_count"],
+            "bus_count": data["bus_count"],
+            "sample_lat": data.get("sample_lat"),
+            "sample_lng": data.get("sample_lng"),
+        })
+    return sorted(result, key=lambda x: x["state"])
+
+
 @api.get("/routes")
-async def list_routes():
-    routes = await db.routes.find({"active": True}, {"_id": 0}).to_list(200)
+async def list_routes(state: Optional[str] = None):
+    query = {"active": True}
+    if state and state.strip() and state.lower() != "all":
+        query["state"] = {"$regex": f"^{state.strip()}$", "$options": "i"}
+    routes = await db.routes.find(query, {"_id": 0}).to_list(500)
     counts = {}
     for b in engine.buses.values():
         counts[b.route_id] = counts.get(b.route_id, 0) + 1
@@ -219,8 +309,13 @@ async def create_suggestion(body: SuggestionIn):
 
 
 @api.get("/live")
-async def live():
-    return engine.snapshot()
+async def live(state: Optional[str] = None, lat: Optional[float] = None, lng: Optional[float] = None, radius_km: Optional[float] = None):
+    return engine.snapshot(state=state, lat=lat, lng=lng, radius_km=radius_km)
+
+
+@api.get("/buses/nearby")
+async def nearby_buses(lat: float, lng: float, radius_km: float = 50.0, limit: int = 10):
+    return engine.nearby_buses(lat=lat, lng=lng, radius_km=radius_km, limit=limit)
 
 
 @api.get("/buses/{bus_id}")
@@ -229,6 +324,22 @@ async def get_bus(bus_id: str):
     if not bus:
         raise HTTPException(404, "Bus not found")
     return engine.bus_dict(bus, with_etas=True)
+
+
+@api.post("/buses/{bus_id}/opt-in")
+async def bus_opt_in(bus_id: str):
+    res = engine.opt_in_passenger(bus_id)
+    if not res:
+        raise HTTPException(404, "Bus not found")
+    return res
+
+
+@api.post("/buses/{bus_id}/opt-out")
+async def bus_opt_out(bus_id: str):
+    res = engine.opt_out_passenger(bus_id)
+    if not res:
+        raise HTTPException(404, "Bus not found")
+    return res
 
 
 @api.post("/search")
@@ -263,6 +374,99 @@ async def search_routes(body: SearchIn):
             "created_at": now_iso(),
         })
     return {"results": results, "unserved": len(results) == 0}
+
+
+@api.get("/search/unified")
+async def unified_search(q: str = ""):
+    query = q.strip().lower()
+    all_buses = [engine.bus_dict(b, with_etas=True) for b in engine.buses.values() if b.route_id in engine.routes]
+    routes_list = await db.routes.find({"active": True}, {"_id": 0}).to_list(200)
+
+    # If query is empty, return popular suggestions
+    if not query:
+        suggested_routes = routes_list[:4]
+        suggested_stops = []
+        seen = set()
+        for r in routes_list:
+            for s in r.get("stops", [])[:2]:
+                if s["name"] not in seen:
+                    seen.add(s["name"])
+                    suggested_stops.append({**s, "route_id": r["id"], "route_number": r["number"], "route_color": r["color"]})
+        return {
+            "query": "",
+            "routes": suggested_routes,
+            "buses": all_buses[:4],
+            "stops": suggested_stops[:6],
+            "total": len(suggested_routes) + len(all_buses[:4]) + len(suggested_stops[:6]),
+            "is_suggestion": True,
+        }
+
+    # Match routes
+    matched_routes = []
+    for r in routes_list:
+        if (query in r["number"].lower() or
+            query in r["name"].lower() or
+            (r.get("name_hi") and query in r["name_hi"].lower()) or
+            query in r.get("origin", "").lower() or
+            query in r.get("destination", "").lower()):
+            bus_count = sum(1 for b in all_buses if b["route_id"] == r["id"])
+            matched_routes.append({**r, "bus_count": bus_count})
+
+    # Match buses
+    matched_buses = []
+    for b in all_buses:
+        if (query in b["plate"].lower() or
+            query in b["route_number"].lower() or
+            query in b["driver"].lower() or
+            query in b["route_name"].lower() or
+            (b.get("terminus") and query in b["terminus"].lower()) or
+            (b.get("terminus_hi") and query in b["terminus_hi"].lower())):
+            matched_buses.append(b)
+
+    # Match stops
+    matched_stops = []
+    seen_stops = set()
+    for r in routes_list:
+        for s in r.get("stops", []):
+            name_en = s["name"].lower()
+            name_hi = (s.get("name_hi") or "").lower()
+            if query in name_en or query in name_hi:
+                if s["name"] not in seen_stops:
+                    seen_stops.add(s["name"])
+                    approaching = []
+                    for b in all_buses:
+                        if b["route_id"] == r["id"] and b.get("etas"):
+                            eta_item = next((e for e in b["etas"] if e["stop_id"] == s["id"]), None)
+                            if eta_item:
+                                approaching.append({
+                                    "bus_id": b["id"],
+                                    "plate": b["plate"],
+                                    "route_number": b["route_number"],
+                                    "eta_s": eta_item["eta_s"],
+                                })
+                    approaching.sort(key=lambda x: x["eta_s"])
+                    matched_stops.append({
+                        "id": s["id"],
+                        "name": s["name"],
+                        "name_hi": s.get("name_hi", ""),
+                        "lat": s["lat"],
+                        "lng": s["lng"],
+                        "route_id": r["id"],
+                        "route_number": r["number"],
+                        "route_name": r["name"],
+                        "color": r["color"],
+                        "best_eta": approaching[0] if approaching else None,
+                    })
+
+    total = len(matched_routes) + len(matched_buses) + len(matched_stops)
+    return {
+        "query": q,
+        "routes": matched_routes,
+        "buses": matched_buses,
+        "stops": matched_stops,
+        "total": total,
+        "is_suggestion": False,
+    }
 
 
 @api.post("/sos")
@@ -367,9 +571,17 @@ async def admin_overview(admin: AdminDep):
     active_sos = await db.sos.find({"status": "active"}, {"_id": 0}).sort("created_at", -1).to_list(50)
     demand_count = await db.demand.count_documents({})
     suggestions_new = await db.suggestions.count_documents({"status": "new"})
+    unique_stops = set()
+    for r in engine.routes.values():
+        for s in r.get("stops", []):
+            unique_stops.add(s["name"].lower())
+    active_trips = sum(1 for b in snap["buses"] if b.get("speed_kmph", 0) > 0 and b.get("status") != "maintenance")
+    service_status = "100% Operational" if len(active_sos) == 0 and len(snap["bunching"]) == 0 else ("Attention Required" if len(active_sos) > 0 else "Minor Delays")
     return {
-        "routes": len(engine.routes), "buses": len(snap["buses"]), "sos_active": len(active_sos),
-        "bunching": snap["bunching"], "sos": active_sos, "demand_count": demand_count, "suggestions_new": suggestions_new,
+        "routes": len(engine.routes), "buses": len(snap["buses"]),
+        "total_stops": len(unique_stops), "active_trips": active_trips, "service_status": service_status,
+        "sos_active": len(active_sos), "bunching": snap["bunching"], "sos": active_sos,
+        "demand_count": demand_count, "suggestions_new": suggestions_new,
         "live": snap["buses"], "ts": snap["ts"],
     }
 
@@ -394,11 +606,20 @@ async def admin_resolve_sos(sos_id: str, admin: AdminDep):
 @api.post("/admin/routes")
 async def admin_create_route(body: RouteIn, admin: AdminDep):
     doc = build_route_doc(body.number, body.name, body.name_hi or body.name, body.color, [s.model_dump() for s in body.stops])
-    try:
-        coords, snapped = await osrm_snap([[s.lng, s.lat] for s in body.stops])
-        apply_road_path(doc, coords, snapped)
-    except Exception as exc:
-        logger.warning("OSRM snap failed for new route: %s", exc)
+    if body.origin:
+        doc["origin"] = body.origin
+    if body.destination:
+        doc["destination"] = body.destination
+    if body.path and body.path.get("coordinates"):
+        apply_road_path(doc, body.path["coordinates"])
+    elif body.path_coordinates:
+        apply_road_path(doc, body.path_coordinates)
+    else:
+        try:
+            coords, snapped = await osrm_snap([[s.lng, s.lat] for s in body.stops])
+            apply_road_path(doc, coords, snapped)
+        except Exception as exc:
+            logger.warning("OSRM snap failed for new route: %s", exc)
     await db.routes.insert_one(dict(doc))
     engine.add_route(doc, bus_count=max(1, min(body.bus_count, 5)))
     return doc
@@ -420,6 +641,57 @@ async def admin_suggestion_status(sid: str, body: SuggestionStatus, admin: Admin
     if res.matched_count == 0:
         raise HTTPException(404, "Suggestion not found")
     return {"ok": True}
+
+
+@api.post("/admin/suggestions/{sid}/convert-to-route")
+async def admin_convert_suggestion(sid: str, body: ConvertSuggestionIn, admin: AdminDep):
+    sug = await db.suggestions.find_one({"id": sid}, {"_id": 0})
+    if not sug:
+        raise HTTPException(404, "Suggestion not found")
+
+    from_name = sug.get("from_text", "Origin")
+    to_name = sug.get("to_text", "Destination")
+    f_lat = float(sug.get("lat") or 28.6139)
+    f_lng = float(sug.get("lng") or 77.2090)
+    t_lat = round(f_lat + 0.045, 4)
+    t_lng = round(f_lng + 0.045, 4)
+    mid_lat = round((f_lat + t_lat) / 2, 4)
+    mid_lng = round((f_lng + t_lng) / 2, 4)
+
+    number = body.route_number or f"R-{random.randint(100, 999)}"
+    stops = [
+        {"name": from_name, "name_hi": "", "lat": f_lat, "lng": f_lng},
+        {"name": f"{from_name} Junction", "name_hi": "", "lat": mid_lat, "lng": mid_lng},
+        {"name": to_name, "name_hi": "", "lat": t_lat, "lng": t_lng},
+    ]
+
+    state = body.state or "Delhi"
+    city = body.city or from_name
+    doc = build_route_doc(number, f"{from_name} – {to_name}", "", body.color or "#C04A00", stops, state=state, city=city)
+
+    try:
+        coords, snapped = await osrm_snap([[s["lng"], s["lat"]] for s in stops])
+        apply_road_path(doc, coords, snapped)
+    except Exception as exc:
+        logger.warning("OSRM snap failed during conversion: %s", exc)
+
+    await db.routes.insert_one(dict(doc))
+    engine.add_route(doc, bus_count=max(1, body.bus_count))
+    await db.suggestions.update_one(
+        {"id": sid},
+        {"$set": {
+            "status": "approved",
+            "arranged_route_id": doc["id"],
+            "arranged_route_number": number,
+            "arranged_at": now_iso(),
+        }}
+    )
+    return {
+        "ok": True,
+        "message": "Route arranged and deployed successfully",
+        "route": doc,
+        "buses_deployed": max(1, body.bus_count),
+    }
 
 
 @api.put("/admin/routes/{route_id}")
@@ -449,7 +721,104 @@ async def admin_add_bus(route_id: str, admin: AdminDep):
     bus = engine.add_bus(route_id)
     if not bus:
         raise HTTPException(404, "Route not found")
-    return engine.bus_dict(bus)
+    return engine.bus_dict(bus, with_etas=True)
+
+
+@api.get("/admin/buses")
+async def admin_list_buses(admin: AdminDep):
+    return [engine.bus_dict(b, with_etas=True) for b in engine.buses.values()]
+
+
+@api.post("/admin/buses")
+async def admin_create_bus(body: BusCreateIn, admin: AdminDep):
+    bus = engine.add_bus(body.route_id, plate=body.plate, driver=body.driver, status=body.status, schedule=body.schedule)
+    if not bus:
+        raise HTTPException(404, "Route not found")
+    return engine.bus_dict(bus, with_etas=True)
+
+
+@api.put("/admin/buses/{bus_id}")
+async def admin_update_bus(bus_id: str, body: BusUpdateIn, admin: AdminDep):
+    bus = engine.update_bus(bus_id, body.model_dump(exclude_none=True))
+    if not bus:
+        raise HTTPException(404, "Bus not found")
+    return engine.bus_dict(bus, with_etas=True)
+
+
+@api.delete("/admin/buses/{bus_id}")
+async def admin_delete_bus(bus_id: str, admin: AdminDep):
+    ok = engine.remove_bus(bus_id)
+    if not ok:
+        raise HTTPException(404, "Bus not found")
+    return {"ok": True}
+
+
+# ---- Admin Driver Directory ------------------------------------------
+@api.get("/admin/drivers")
+async def admin_list_drivers(admin: AdminDep):
+    return engine.get_drivers()
+
+
+@api.post("/admin/drivers")
+async def admin_create_driver(body: DriverIn, admin: AdminDep):
+    return engine.create_driver(body.model_dump())
+
+
+@api.put("/admin/drivers/{driver_id}")
+async def admin_update_driver(driver_id: str, body: DriverUpdateIn, admin: AdminDep):
+    driver = engine.update_driver(driver_id, body.model_dump(exclude_none=True))
+    if not driver:
+        raise HTTPException(404, "Driver not found")
+    return driver
+
+
+@api.delete("/admin/drivers/{driver_id}")
+async def admin_delete_driver(driver_id: str, admin: AdminDep):
+    ok = engine.delete_driver(driver_id)
+    if not ok:
+        raise HTTPException(404, "Driver not found")
+    return {"ok": True}
+
+
+@api.get("/admin/stops")
+async def admin_list_stops(admin: AdminDep):
+    stops_map = {}
+    for r in engine.routes.values():
+        for s in r.get("stops", []):
+            key = s["name"].lower()
+            if key not in stops_map:
+                stops_map[key] = {
+                    "id": s["id"],
+                    "name": s["name"],
+                    "name_hi": s.get("name_hi", ""),
+                    "lat": s["lat"],
+                    "lng": s["lng"],
+                    "routes": [],
+                }
+            stops_map[key]["routes"].append({"id": r["id"], "number": r["number"], "name": r["name"], "color": r["color"]})
+    return sorted(stops_map.values(), key=lambda x: x["name"])
+
+
+@api.get("/admin/schedules")
+async def admin_list_schedules(admin: AdminDep):
+    out = []
+    for r in engine.routes.values():
+        tt = engine.timetable(r["id"])
+        if tt:
+            out.append({
+                "route_id": r["id"],
+                "route_number": r["number"],
+                "route_name": r["name"],
+                "route_name_hi": r["name_hi"],
+                "color": r["color"],
+                "bus_count": sum(1 for b in engine.buses.values() if b.route_id == r["id"]),
+                "headway_min": tt["headway_min"],
+                "first": tt["first"],
+                "last": tt["last"],
+                "one_way_min": tt["one_way_min"],
+                "total_trips": len(tt["forward"]["trips"]) + len(tt["backward"]["trips"]),
+            })
+    return out
 
 
 @api.get("/admin/buses/{bus_id}/history")

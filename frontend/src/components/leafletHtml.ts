@@ -1,7 +1,25 @@
 import { useEffect } from "react";
 
 export type MapRoute = { id: string; color: string; number: string; path: [number, number][]; stops: { id: string; name: string; lat: number; lng: number }[] };
-export type MapBus = { id: string; lat: number; lng: number; color: string; label: string; sos: boolean; heading: number };
+export type MapBus = {
+  id: string;
+  lat: number;
+  lng: number;
+  color: string;
+  label: string;
+  sos: boolean;
+  heading: number;
+  route_id?: string;
+  route_number?: string;
+  route_name?: string;
+  plate?: string;
+  driver?: string;
+  driver_phone?: string;
+  conductor?: string;
+  conductor_phone?: string;
+  capacity?: number;
+  passengers_opted_in?: number;
+};
 export type MapPoint = { lat: number; lng: number; weight: number; label: string };
 
 export type LeafletMapProps = {
@@ -13,6 +31,8 @@ export type LeafletMapProps = {
   marker?: { lat: number; lng: number; label: string } | null;
   highlightRouteId?: string | null;
   focus?: { lat: number; lng: number; zoom?: number } | null;
+  theme?: "light" | "dark";
+  showStops?: boolean;
   onBusPress?: (id: string) => void;
   onStopPress?: (stopId: string, routeId: string) => void;
   style?: any;
@@ -21,7 +41,7 @@ export type LeafletMapProps = {
 
 /** Pushes props into the map page whenever they change. Shared by native & web wrappers. */
 export function useMapSync(ready: boolean, send: (msg: object) => void, p: LeafletMapProps) {
-  const { routes, buses, user, heat, trail, marker, highlightRouteId, focus } = p;
+  const { routes, buses, user, heat, trail, marker, highlightRouteId, focus, theme, showStops } = p;
   useEffect(() => {
     if (ready) send({ type: "routes", routes: routes ?? [], highlight: highlightRouteId ?? null });
   }, [ready, routes, highlightRouteId, send]);
@@ -40,6 +60,12 @@ export function useMapSync(ready: boolean, send: (msg: object) => void, p: Leafl
   useEffect(() => {
     if (ready && focus) send({ type: "focus", ...focus });
   }, [ready, focus, send]);
+  useEffect(() => {
+    if (ready && theme) send({ type: "theme", scheme: "light" }); // Always light mode for users
+  }, [ready, theme, send]);
+  useEffect(() => {
+    if (ready && showStops !== undefined) send({ type: "showStops", show: showStops });
+  }, [ready, showStops, send]);
 }
 
 const CARTO_KEY = process.env.EXPO_PUBLIC_CARTO_API_KEY || "";
@@ -63,8 +89,13 @@ html,body,#map{margin:0;padding:0;height:100%;width:100%;background:#F8FAFC;font
 .stop-node{width:14px;height:14px;border-radius:7px;background:#FFFFFF;border:3.5px solid #0F172A;box-shadow:0 2px 6px rgba(0,0,0,0.3);cursor:pointer;transition:transform 0.2s}
 .stop-node:hover{transform:scale(1.3)}
 
-/* User Location Dot */
-.user-dot{width:20px;height:20px;border-radius:10px;background:#3B82F6;border:3.5px solid #FFFFFF;box-shadow:0 0 0 8px rgba(59,130,246,0.25)}
+/* User Location Beacon & Ripple */
+.user-beacon{position:relative;display:flex;flex-direction:column;align-items:center;pointer-events:none}
+.user-pulse-ring{position:absolute;top:2px;width:40px;height:40px;border-radius:20px;background:rgba(37,99,235,0.25);border:2px solid rgba(37,99,235,0.7);animation:user-pulse 1.8s infinite}
+.user-dot{width:22px;height:22px;border-radius:11px;background:#2563EB;border:3px solid #FFFFFF;box-shadow:0 3px 10px rgba(37,99,235,0.6);position:relative;z-index:2;margin-top:11px}
+.user-dot-inner{width:8px;height:8px;border-radius:4px;background:#FFFFFF;position:absolute;top:4px;left:4px}
+.user-label-pill{background:#1E293B;color:#FFFFFF;font-size:10px;font-weight:800;padding:2px 8px;border-radius:10px;margin-top:4px;white-space:nowrap;box-shadow:0 3px 8px rgba(0,0,0,0.3);border:1.5px solid #FFFFFF;z-index:3}
+@keyframes user-pulse{0%{transform:scale(0.8);opacity:0.9}70%{transform:scale(1.8);opacity:0}100%{transform:scale(2.2);opacity:0}}
 
 /* Bilingual Stop Tooltip */
 .stop-tooltip{background:#FFFFFF;padding:4px 8px;border-radius:8px;box-shadow:0 4px 12px rgba(15,23,42,0.15);border:1px solid #E2E8F0;text-align:center}
@@ -76,16 +107,35 @@ html,body,#map{margin:0;padding:0;height:100%;width:100%;background:#F8FAFC;font
 </style></head><body><div id="map"></div>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
-var map=L.map('map',{zoomControl:false,attributionControl:true}).setView([26.93,81.2],11);
-// CartoDB Voyager tile layer with clean watermark-free API key
-L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png' + ('${CARTO_KEY}' ? '?key=${CARTO_KEY}' : ''),{
-  maxZoom:19,
-  subdomains:'abcd',
-  attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
-}).addTo(map);
+var map=L.map('map',{zoomControl:false,attributionControl:true,maxZoom:21}).setView([26.93,81.2],11);
+var currentTileLayer=null;
+function updateTheme(t){
+  // Always crisp light mode tiles when viewed by users
+  var tileUrl='https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png';
+  if('${CARTO_KEY}')tileUrl+='?key=${CARTO_KEY}';
+  if(currentTileLayer){
+    currentTileLayer.setUrl(tileUrl);
+  }else{
+    currentTileLayer=L.tileLayer(tileUrl,{
+      maxNativeZoom:18,
+      maxZoom:21,
+      subdomains:'abcd',
+      attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
+    }).addTo(map);
+    currentTileLayer.on('tileerror',function(e){
+      if(e.tile&&!e.tile._fallback){
+        e.tile._fallback=true;
+        var c=e.coords;
+        e.tile.src='https://tile.openstreetmap.org/'+c.z+'/'+c.x+'/'+c.y+'.png';
+      }
+    });
+  }
+  var el=document.getElementById('map');if(el)el.style.background='#F8FAFC';
+}
+updateTheme('light');
 
 var casingLayer=L.layerGroup().addTo(map),routeLayer=L.layerGroup().addTo(map),stopLayer=L.layerGroup().addTo(map),heatLayer=L.layerGroup().addTo(map),trailLayer=L.layerGroup().addTo(map);
-var buses={},userM=null,fitted=false;
+var buses={},userM=null,fitted=false,userCentered=false;
 
 function post(m){var s=JSON.stringify(m);if(window.ReactNativeWebView){window.ReactNativeWebView.postMessage(s)}else if(window.parent!==window){window.parent.postMessage(s,'*')}}
 
@@ -99,6 +149,32 @@ function createVehicleIcon(b){
              '<div class="vehicle-disc'+(b.sos?' sos':'')+'" style="background:'+b.color+';transform:rotate('+heading+'deg)">'+dirSvg+'</div>'+
            '</div>';
   return L.divIcon({className:'',iconSize:[40,54],iconAnchor:[20,40],html:html});
+}
+
+function makeBusPopup(b){
+  var h='<div style="font-family:-apple-system,sans-serif;padding:6px 8px;min-width:200px;color:#0F172A">';
+  h+='<div style="display:flex;align-items:center;gap:6px;margin-bottom:5px">';
+  h+='<span style="background:'+(b.color||'#C04A00')+';color:#FFFFFF;font-weight:800;font-size:11px;padding:2px 6px;border-radius:6px">'+(b.route_number||b.label)+'</span>';
+  if(b.plate)h+='<span style="font-weight:700;font-size:11px;color:#475569">'+b.plate+'</span>';
+  h+='</div>';
+  if(b.driver){
+    h+='<div style="font-size:11px;margin-bottom:3px">👤 <b>Driver:</b> '+b.driver;
+    if(b.driver_phone)h+=' <br><a href="tel:'+b.driver_phone+'" style="color:#0284C7;font-weight:700;text-decoration:none">📞 '+b.driver_phone+'</a>';
+    h+='</div>';
+  }
+  if(b.conductor){
+    h+='<div style="font-size:11px;margin-bottom:4px">🎫 <b>Conductor:</b> '+b.conductor;
+    if(b.conductor_phone)h+=' <br><a href="tel:'+b.conductor_phone+'" style="color:#0284C7;font-weight:700;text-decoration:none">📞 '+b.conductor_phone+'</a>';
+    h+='</div>';
+  }
+  if(b.capacity){
+    var opt = b.passengers_opted_in != null ? b.passengers_opted_in : 18;
+    h+='<div style="font-size:11px;background:#F1F5F9;padding:4px 6px;border-radius:6px;margin-top:4px;color:#334155">';
+    h+='💺 <b>'+opt+' / '+b.capacity+'</b> seats occupied';
+    h+='</div>';
+  }
+  h+='</div>';
+  return h;
 }
 
 function setRoutes(rs,hl){
@@ -129,7 +205,7 @@ function setRoutes(rs,hl){
       m.on('click',function(){post({type:'stopTap',id:s.id,routeId:r.id})});
     });
   });
-  if(!fitted&&all.length){
+  if(!fitted&&all.length&&!userCentered){
     fitted=true;
     map.fitBounds(L.latLngBounds(all),{padding:[36,36]});
   }
@@ -154,6 +230,7 @@ function animateVehicle(m,to,heading,b){
       requestAnimationFrame(step);
     } else {
       m.setIcon(createVehicleIcon(b));
+      if(m.getPopup()){m.setPopupContent(makeBusPopup(b));}
     }
   }
   requestAnimationFrame(step);
@@ -166,6 +243,7 @@ function setBuses(bs){
     var m=buses[b.id];
     if(!m){
       m=L.marker([b.lat,b.lng],{icon:createVehicleIcon(b),zIndexOffset:1000}).addTo(map);
+      m.bindPopup(makeBusPopup(b),{offset:[0,-32],closeButton:true});
       m.on('click',function(){post({type:'busTap',id:b.id})});
       buses[b.id]=m;
       m._sos=b.sos;
@@ -174,6 +252,7 @@ function setBuses(bs){
       animateVehicle(m,[b.lat,b.lng],b.heading,b);
       m._sos=b.sos;
       m._heading=b.heading;
+      if(m.getPopup()&&m.isPopupOpen()){m.setPopupContent(makeBusPopup(b));}
     }
   });
   Object.keys(buses).forEach(function(id){
@@ -187,7 +266,21 @@ function setBuses(bs){
 function setUser(u){
   if(userM){map.removeLayer(userM);userM=null}
   if(u){
-    userM=L.marker([u.lat,u.lng],{icon:L.divIcon({className:'',iconSize:[20,20],iconAnchor:[10,10],html:'<div class="user-dot"></div>'}),zIndexOffset:2000}).addTo(map);
+    var beaconHtml='<div class="user-beacon">'+
+                     '<div class="user-pulse-ring"></div>'+
+                     '<div class="user-dot"><div class="user-dot-inner"></div></div>'+
+                     '<div class="user-label-pill">You are here / आप यहाँ हैं</div>'+
+                   '</div>';
+    userM=L.marker([u.lat,u.lng],{
+      icon:L.divIcon({className:'',iconSize:[140,64],iconAnchor:[70,22],html:beaconHtml}),
+      zIndexOffset:3000
+    }).addTo(map);
+    userM.bindTooltip("Your Location / आपकी वर्तमान स्थिति",{direction:'top',offset:[0,-22],className:'stop-tooltip'});
+    if(!userCentered){
+      userCentered=true;
+      fitted=true;
+      map.setView([u.lat,u.lng],14,{animate:true});
+    }
   }
 }
 
@@ -223,6 +316,11 @@ function handle(d){
       case 'heat':setHeat(d.points);break;
       case 'trail':setTrail(d.trail,d.marker);break;
       case 'focus':map.setView([d.lat,d.lng],d.zoom||14,{animate:true});break;
+      case 'theme':updateTheme(d.scheme);break;
+      case 'showStops':
+        if(d.show){if(!map.hasLayer(stopLayer))map.addLayer(stopLayer);}
+        else{if(map.hasLayer(stopLayer))map.removeLayer(stopLayer);}
+        break;
     }
   }catch(e){}
 }

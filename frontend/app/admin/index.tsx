@@ -59,9 +59,10 @@ function Dashboard() {
   const stats = [
     { label: t("routesCount"), value: d?.routes ?? "—", icon: "routes", color: colors.brandPrimary, testID: "stat-routes" },
     { label: t("activeBuses"), value: d?.buses ?? "—", icon: "bus-multiple", color: colors.success, testID: "stat-buses" },
+    { label: t("activeTrips"), value: d?.active_trips ?? d?.buses ?? "—", icon: "navigation-variant", color: colors.info ?? colors.brandPrimary, testID: "stat-trips" },
+    { label: t("totalStops"), value: d?.total_stops ?? "—", icon: "map-marker", color: colors.warning, testID: "stat-stops" },
+    { label: t("serviceStatus"), value: d?.service_status === "optimal" ? t("operational") : (d?.service_status ? d.service_status.toUpperCase() : t("operational")), icon: "check-decagram", color: colors.success, testID: "stat-status" },
     { label: t("sosActive"), value: d?.sos_active ?? "—", icon: "alarm-light", color: colors.error, testID: "stat-sos" },
-    { label: t("demandCount"), value: d?.demand_count ?? "—", icon: "chart-bubble", color: colors.warning, testID: "stat-demand" },
-    { label: t("suggestions"), value: d?.suggestions_new ?? "—", icon: "lightbulb-on-outline", color: colors.brandPrimary, testID: "stat-suggestions" },
   ];
 
   return (
@@ -83,8 +84,8 @@ function Dashboard() {
           {stats.map((s) => (
             <View key={s.label} style={styles.stat} testID={s.testID}>
               <Icon name={s.icon} size={24} color={s.color} />
-              <Text style={styles.statValue}>{s.value}</Text>
-              <Text style={styles.statLabel}>{s.label}</Text>
+              <Text style={styles.statValue} numberOfLines={1}>{s.value}</Text>
+              <Text style={styles.statLabel} numberOfLines={1}>{s.label}</Text>
             </View>
           ))}
         </View>
@@ -93,11 +94,15 @@ function Dashboard() {
 
         <View style={styles.navRow}>
           <NavTile icon="map-marker-path" label={t("manageRoutes")} onPress={() => router.push("/admin/routes")} testID="nav-manage-routes" />
-          <NavTile icon="history" label={t("replay")} onPress={() => router.push("/admin/replay")} testID="nav-replay" />
+          <NavTile icon="bus-multiple" label={t("manageFleet")} onPress={() => router.push("/admin/fleet" as any)} testID="nav-manage-fleet" />
         </View>
         <View style={styles.navRow}>
+          <NavTile icon="history" label={t("replay")} onPress={() => router.push("/admin/replay")} testID="nav-replay" />
           <NavTile icon="fire" label={t("demandHeatmap")} onPress={() => router.push("/admin/demand")} testID="nav-demand" />
+        </View>
+        <View style={styles.navRow}>
           <NavTile icon="lightbulb-on-outline" label={t("suggestions")} onPress={() => router.push("/admin/suggestions")} testID="nav-suggestions" badge={d?.suggestions_new} />
+          <NavTile icon="card-account-details-outline" label={t("driverDirectory")} onPress={() => router.push("/admin/drivers" as any)} testID="nav-drivers" />
         </View>
 
         <Text style={styles.section}>{t("sosAlerts")}</Text>

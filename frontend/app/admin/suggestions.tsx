@@ -7,6 +7,7 @@ import { Suggestion, api } from "@/src/api";
 import { AdminGate } from "@/src/components/AdminGate";
 import { Icon } from "@/src/components/Icon";
 import { ScreenHeader } from "@/src/components/ScreenHeader";
+import { useToast } from "@/src/components/Toast";
 import { useLanguage } from "@/src/i18n/LanguageContext";
 import { makeStyles, useTheme } from "@/src/theme";
 
@@ -24,6 +25,7 @@ function Suggestions() {
   const { t } = useLanguage();
   const styles = useStyles();
   const { colors } = useTheme();
+  const toast = useToast();
   const insets = useSafeAreaInsets();
   const qc = useQueryClient();
   const q = useQuery({ queryKey: ["admin-suggestions"], queryFn: api.admin.suggestions, refetchInterval: 10000 });
@@ -34,6 +36,20 @@ function Suggestions() {
       qc.invalidateQueries({ queryKey: ["admin-overview"] });
     },
   });
+
+  const convertMut = useMutation({
+    mutationFn: (id: string) => api.admin.convertSuggestion(id, { bus_count: 2 }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-suggestions"] });
+      qc.invalidateQueries({ queryKey: ["admin-overview"] });
+      qc.invalidateQueries({ queryKey: ["routes"] });
+      qc.invalidateQueries({ queryKey: ["admin-buses"] });
+      qc.invalidateQueries({ queryKey: ["admin-drivers"] });
+      toast.show(t("routeArranged"), "success");
+    },
+    onError: (e: Error) => toast.show(e.message, "error"),
+  });
+
   const statusColor: Record<Suggestion["status"], string> = { new: colors.brandPrimary, reviewed: colors.info, approved: colors.success, rejected: colors.error };
   const statusLabel: Record<Suggestion["status"], string> = { new: t("statusNew"), reviewed: t("statusReviewed"), approved: t("statusApproved"), rejected: t("statusRejected") };
 
@@ -62,6 +78,18 @@ function Suggestions() {
             <Text style={styles.meta}>
               {new Date(s.created_at).toLocaleString()}{s.contact ? ` · ${s.contact}` : ""}{s.lat != null ? ` · ${s.lat.toFixed(3)}, ${s.lng?.toFixed(3)}` : ""}
             </Text>
+
+            {/* Arrange and deploy route button */}
+            <Pressable
+              style={styles.deployBtn}
+              onPress={() => convertMut.mutate(s.id)}
+              disabled={convertMut.isPending}
+              testID={`deploy-suggestion-${s.id}`}
+            >
+              <Icon name="road-variant" size={18} color="#FFFFFF" />
+              <Text style={styles.deployBtnText}>{t("arrangeRoute")}</Text>
+            </Pressable>
+
             <View style={styles.actions}>
               {STATUSES.filter((st) => st !== s.status).map((st) => (
                 <Pressable key={st} style={[styles.actionBtn, { borderColor: statusColor[st] }]} onPress={() => mut.mutate({ id: s.id, status: st })} testID={`suggestion-${s.id}-${st}`}>
@@ -87,6 +115,22 @@ const useStyles = makeStyles((colors) => ({
   notes: { fontSize: 14, color: colors.onSurfaceSecondary, lineHeight: 20 },
   meta: { fontSize: 12, color: colors.muted },
   actions: { flexDirection: "row", gap: 8, flexWrap: "wrap" },
+  deployBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    backgroundColor: colors.brandPrimary,
+    height: 40,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    marginVertical: 4,
+  },
+  deployBtnText: {
+    color: "#FFFFFF",
+    fontWeight: "800",
+    fontSize: 13,
+  },
   actionBtn: { flexGrow: 1, flexBasis: "30%", height: 40, borderRadius: 10, borderWidth: 1.5, alignItems: "center", justifyContent: "center", paddingHorizontal: 8 },
   actionText: { fontWeight: "800", fontSize: 13 },
 }));

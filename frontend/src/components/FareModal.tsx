@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
 import { ActivityIndicator, Modal, Pressable, ScrollView, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -13,7 +13,16 @@ import { shareMessage } from "@/src/utils/share";
 type Props = { visible: boolean; onClose: () => void; routeId: string; routeNumber: string; color: string; stops: Stop[]; initialFrom?: string | null };
 
 /** Fare & travel-time calculator between any two stops, with the stop-by-stop breakdown. */
-export function FareModal({ visible, onClose, routeId, routeNumber, color, stops, initialFrom }: Props) {
+export function FareModal(props: Props) {
+  if (!props.visible) return null;
+  return (
+    <Modal visible={props.visible} animationType="slide" onRequestClose={props.onClose} presentationStyle="pageSheet">
+      <FareModalInner {...props} />
+    </Modal>
+  );
+}
+
+function FareModalInner({ onClose, routeId, routeNumber, color, stops, initialFrom }: Props) {
   const insets = useSafeAreaInsets();
   const { t, tr, lang } = useLanguage();
   const styles = useStyles();
@@ -21,28 +30,20 @@ export function FareModal({ visible, onClose, routeId, routeNumber, color, stops
   const [from, setFrom] = useState<string | null>(initialFrom ?? stops[0]?.id ?? null);
   const [to, setTo] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (visible) {
-      setFrom(initialFrom ?? stops[0]?.id ?? null);
-      setTo(null);
-    }
-  }, [visible, initialFrom, stops]);
-
   const q = useQuery({ queryKey: ["fare", routeId, from, to], queryFn: () => api.fare(routeId, from as string, to as string), enabled: !!from && !!to && from !== to });
   const d = q.data;
 
   return (
-    <Modal visible={visible} animationType="slide" onRequestClose={onClose} presentationStyle="pageSheet">
-      <View style={[styles.root, { paddingTop: insets.top + 8 }]} testID="fare-modal">
-        <View style={styles.header}>
-          <Text style={styles.title}>{t("fareCalc")}</Text>
-          <Pressable onPress={onClose} style={styles.close} testID="fare-close">
-            <Icon name="close" size={26} color={colors.onSurface} />
-          </Pressable>
-        </View>
-        <Text style={styles.label}>{t("selectFrom")}</Text>
-        <StopChips stops={stops} color={color} value={from} onChange={setFrom} exclude={to} testPrefix="fare-from" />
-        <Text style={styles.label}>{t("selectTo")}</Text>
+    <View style={[styles.root, { paddingTop: insets.top + 8 }]} testID="fare-modal">
+      <View style={styles.header}>
+        <Text style={styles.title}>{t("fareCalc")}</Text>
+        <Pressable onPress={onClose} style={styles.close} testID="fare-close">
+          <Icon name="close" size={26} color={colors.onSurface} />
+        </Pressable>
+      </View>
+      <Text style={styles.label}>{t("selectFrom")}</Text>
+      <StopChips stops={stops} color={color} value={from} onChange={setFrom} exclude={to} testPrefix="fare-from" />
+      <Text style={styles.label}>{t("selectTo")}</Text>
         <StopChips stops={stops} color={color} value={to} onChange={setTo} exclude={from} testPrefix="fare-to" />
 
         <ScrollView contentContainerStyle={{ padding: 16, gap: 12, paddingBottom: insets.bottom + 24 }}>
@@ -91,7 +92,6 @@ export function FareModal({ visible, onClose, routeId, routeNumber, color, stops
           )}
         </ScrollView>
       </View>
-    </Modal>
   );
 }
 

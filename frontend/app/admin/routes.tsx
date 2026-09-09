@@ -36,6 +36,8 @@ function RoutesManager() {
   const [number, setNumber] = useState("");
   const [name, setName] = useState("");
   const [nameHi, setNameHi] = useState("");
+  const [origin, setOrigin] = useState("");
+  const [destination, setDestination] = useState("");
   const [color, setColor] = useState(COLORS[0]);
   const [stops, setStops] = useState<StopDraft[]>([emptyStop(), emptyStop()]);
 
@@ -51,6 +53,8 @@ function RoutesManager() {
       setNumber("");
       setName("");
       setNameHi("");
+      setOrigin("");
+      setDestination("");
       setStops([emptyStop(), emptyStop()]);
     },
     onError: (e: Error) => toast.show(e.message, "error"),
@@ -72,6 +76,8 @@ function RoutesManager() {
       number: number.trim(),
       name: name.trim(),
       name_hi: nameHi.trim(),
+      origin: origin.trim() || validStops[0]?.name.trim(),
+      destination: destination.trim() || validStops[validStops.length - 1]?.name.trim(),
       color,
       bus_count: 2,
       stops: validStops.map((s) => ({ name: s.name.trim(), name_hi: s.name_hi.trim(), lat: parseFloat(s.lat), lng: parseFloat(s.lng) })),
@@ -107,7 +113,10 @@ function RoutesManager() {
             </View>
             <View style={{ flex: 1, minWidth: 0 }}>
               <Text style={styles.name} numberOfLines={1}>{tr(r.name, r.name_hi)}</Text>
-              <Text style={styles.meta}>{t("stops", { n: r.stops.length })} · {t("liveBuses", { n: r.bus_count ?? 0 })}</Text>
+              <Text style={styles.meta}>
+                {r.origin && r.destination ? `${r.origin} ➔ ${r.destination} · ` : ""}
+                {t("stops", { n: r.stops.length })} · {t("liveBuses", { n: r.bus_count ?? 0 })}
+              </Text>
             </View>
             <Pressable style={styles.iconBtn} onPress={() => addBus.mutate(r.id)} testID={`admin-add-bus-${r.number}`}>
               <Icon name="bus-plus" size={24} color={colors.brandPrimary} />
@@ -122,6 +131,10 @@ function RoutesManager() {
         <TextInput testID="new-route-number" style={styles.input} placeholder={t("routeNumber")} placeholderTextColor={colors.muted} value={number} onChangeText={setNumber} />
         <TextInput testID="new-route-name" style={styles.input} placeholder={t("routeName")} placeholderTextColor={colors.muted} value={name} onChangeText={setName} />
         <TextInput testID="new-route-name-hi" style={styles.input} placeholder={t("routeNameHi")} placeholderTextColor={colors.muted} value={nameHi} onChangeText={setNameHi} />
+        <View style={styles.pair}>
+          <TextInput testID="new-route-origin" style={[styles.input, { flex: 1 }]} placeholder="Origin (e.g. Railway Station)" placeholderTextColor={colors.muted} value={origin} onChangeText={setOrigin} />
+          <TextInput testID="new-route-destination" style={[styles.input, { flex: 1 }]} placeholder="Destination (e.g. City Hospital)" placeholderTextColor={colors.muted} value={destination} onChangeText={setDestination} />
+        </View>
         <View style={styles.colorRow}>
           {COLORS.map((c) => (
             <Pressable key={c} onPress={() => setColor(c)} style={[styles.swatch, { backgroundColor: c }, color === c && styles.swatchActive]} testID={`color-${c.slice(1)}`} />

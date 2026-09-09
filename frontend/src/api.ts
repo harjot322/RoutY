@@ -45,6 +45,10 @@ export type Route = {
   name: string;
   name_hi: string;
   color: string;
+  state?: string;
+  city?: string;
+  origin?: string;
+  destination?: string;
   stops: Stop[];
   path: { type: "LineString"; coordinates: [number, number][] };
   length_m: number;
@@ -60,8 +64,22 @@ export type Bus = {
   route_name: string;
   route_name_hi: string;
   color: string;
+  state?: string;
+  city?: string;
   plate: string;
   driver: string;
+  driver_name?: string;
+  driver_phone?: string;
+  conductor?: string;
+  conductor_phone?: string;
+  depot_address?: string;
+  driver_id?: string;
+  status: "in_service" | "on_time" | "delayed" | "maintenance" | string;
+  occupancy: "seats_available" | "low" | "medium" | "standing_only" | string;
+  capacity?: number;
+  passengers_opted_in?: number;
+  schedule?: string | null;
+  updated_at?: string;
   lat: number;
   lng: number;
   heading: number;
@@ -73,6 +91,36 @@ export type Bus = {
   terminus_hi: string;
   sos: { id: string; message: string; created_at: string } | null;
   etas?: Eta[];
+};
+
+export type StateInfo = {
+  state: string;
+  cities: string[];
+  route_count: number;
+  bus_count: number;
+  sample_lat?: number;
+  sample_lng?: number;
+};
+
+export type Driver = {
+  id: string;
+  name: string;
+  phone: string;
+  conductor_name?: string;
+  conductor_phone?: string;
+  depot_address?: string;
+  route_id?: string;
+  route_number?: string;
+  route_name?: string;
+  bus_id?: string;
+  bus_plate?: string;
+  state?: string;
+  city?: string;
+  badge_id?: string;
+  status: "on_duty" | "on_break" | "off_duty" | string;
+  lat: number;
+  lng: number;
+  updated_at: string;
 };
 
 export type Bunching = {
@@ -180,6 +228,9 @@ export type HistoryPoint = { lat: number; lng: number; ts: string; speed_kmph: n
 export type Overview = {
   routes: number;
   buses: number;
+  total_stops?: number;
+  active_trips?: number;
+  service_status?: string;
   sos_active: number;
   bunching: Bunching[];
   sos: Sos[];
@@ -187,6 +238,51 @@ export type Overview = {
   suggestions_new: number;
   live: Bus[];
   ts: string;
+};
+
+export type AdminStop = {
+  id: string;
+  name: string;
+  name_hi: string;
+  lat: number;
+  lng: number;
+  routes: { id: string; number: string; name: string; color: string }[];
+};
+
+export type AdminSchedule = {
+  route_id: string;
+  route_number: string;
+  route_name: string;
+  route_name_hi: string;
+  color: string;
+  bus_count: number;
+  headway_min: number;
+  first: string;
+  last: string;
+  one_way_min: number;
+  total_trips: number;
+};
+
+export type UnifiedSearchRoute = Route & { bus_count: number };
+export type UnifiedSearchStop = {
+  id: string;
+  name: string;
+  name_hi: string;
+  lat: number;
+  lng: number;
+  route_id: string;
+  route_number: string;
+  route_name: string;
+  color: string;
+  best_eta?: { bus_id: string; plate: string; route_number: string; eta_s: number } | null;
+};
+export type UnifiedSearchResult = {
+  query: string;
+  routes: UnifiedSearchRoute[];
+  buses: Bus[];
+  stops: UnifiedSearchStop[];
+  total: number;
+  is_suggestion: boolean;
 };
 
 export type Demand = {
@@ -218,7 +314,13 @@ async function request<T>(path: string, init: RequestInit = {}, withAuth = false
 }
 
 export const api = {
-  routes: () => request<Route[]>("/routes"),
+  states: () => request<StateInfo[]>("/states"),
+  routes: (state?: string | unknown) =>
+    request<Route[]>(
+      typeof state === "string" && state && state.toLowerCase() !== "all" && !state.toLowerCase().includes("all states")
+        ? `/routes?state=${encodeURIComponent(state)}`
+        : "/routes"
+    ),
   route: (id: string) => request<RouteDetail>(`/routes/${id}`),
   timetable: (id: string) => request<Timetable>(`/routes/${id}/timetable`),
   fare: (id: string, fromStop: string, toStop: string) => request<FareInfo>(`/routes/${id}/fare?from_stop=${fromStop}&to_stop=${toStop}`),
@@ -227,12 +329,17 @@ export const api = {
     request<Suggestion>("/suggestions", { method: "POST", body: JSON.stringify(body) }),
   live: () => request<LiveSnapshot>("/live"),
   bus: (id: string) => request<Bus>(`/buses/${id}`),
+  nearbyBuses: (lat: number, lng: number, radiusKm: number = 50, limit: number = 10) =>
+    request<(Bus & { distance_m: number })[]>(`/buses/nearby?lat=${lat}&lng=${lng}&radius_km=${radiusKm}&limit=${limit}`),
+  optInBus: (busId: string) => request<Bus>(`/buses/${busId}/opt-in`, { method: "POST" }),
+  optOutBus: (busId: string) => request<Bus>(`/buses/${busId}/opt-out`, { method: "POST" }),
   nearestStop: (lat: number, lng: number) => request<NearestStop>(`/stops/nearest?lat=${lat}&lng=${lng}`),
   search: (from_text: string, to_text: string, lat?: number, lng?: number) =>
     request<{ results: SearchResult[]; unserved: boolean }>("/search", {
       method: "POST",
       body: JSON.stringify({ from_text, to_text, lat, lng }),
     }),
+  unifiedSearch: (q: string = "") => request<UnifiedSearchResult>(`/search/unified?q=${encodeURIComponent(q)}`),
   sos: (body: { bus_id?: string | null; lat?: number; lng?: number; message?: string }) =>
     request<Sos>("/sos", { method: "POST", body: JSON.stringify(body) }),
   translate: (text: string, source: "en" | "hi", target: "en" | "hi") =>
@@ -256,22 +363,44 @@ export const api = {
     overview: () => request<Overview>("/admin/overview", {}, true),
     sosList: () => request<Sos[]>("/admin/sos", {}, true),
     resolveSos: (id: string) => request<{ ok: boolean }>(`/admin/sos/${id}/resolve`, { method: "POST" }, true),
+    routes: () => request<Route[]>("/routes"),
     createRoute: (body: {
       number: string;
       name: string;
       name_hi: string;
       color: string;
+      state?: string;
+      city?: string;
+      origin?: string;
+      destination?: string;
       stops: { name: string; name_hi: string; lat: number; lng: number }[];
       bus_count: number;
+      path_coordinates?: [number, number][];
     }) => request<Route>("/admin/routes", { method: "POST", body: JSON.stringify(body) }, true),
+    updateRoute: (id: string, body: Partial<{ number: string; name: string; name_hi: string; color: string; origin: string; destination: string }>) =>
+      request<Route>(`/admin/routes/${id}`, { method: "PUT", body: JSON.stringify(body) }, true),
     deleteRoute: (id: string) => request<{ ok: boolean }>(`/admin/routes/${id}`, { method: "DELETE" }, true),
+    buses: () => request<Bus[]>("/admin/buses", {}, true),
+    createBus: (body: { route_id: string; plate?: string; driver_name?: string; driver_phone?: string; driver?: string; status?: string; schedule?: string; occupancy?: string }) =>
+      request<Bus>("/admin/buses", { method: "POST", body: JSON.stringify(body) }, true),
+    updateBus: (busId: string, body: Partial<{ plate: string; driver: string; driver_name: string; driver_phone: string; status: string; schedule: string; occupancy: string; route_id: string }>) =>
+      request<Bus>(`/admin/buses/${busId}`, { method: "PUT", body: JSON.stringify(body) }, true),
+    deleteBus: (busId: string) => request<{ ok: boolean }>(`/admin/buses/${busId}`, { method: "DELETE" }, true),
     addBus: (routeId: string) => request<Bus>(`/admin/routes/${routeId}/buses`, { method: "POST" }, true),
+    drivers: () => request<Driver[]>("/admin/drivers", {}, true),
+    createDriver: (body: Partial<Driver>) => request<Driver>("/admin/drivers", { method: "POST", body: JSON.stringify(body) }, true),
+    updateDriver: (driverId: string, body: Partial<Driver>) => request<Driver>(`/admin/drivers/${driverId}`, { method: "PUT", body: JSON.stringify(body) }, true),
+    deleteDriver: (driverId: string) => request<{ ok: boolean }>(`/admin/drivers/${driverId}`, { method: "DELETE" }, true),
+    stops: () => request<AdminStop[]>("/admin/stops", {}, true),
+    schedules: () => request<AdminSchedule[]>("/admin/schedules", {}, true),
     history: (busId: string, minutes: number) =>
       request<{ bus_id: string; points: HistoryPoint[] }>(`/admin/buses/${busId}/history?minutes=${minutes}`, {}, true),
     demand: () => request<Demand>("/admin/demand", {}, true),
     suggestions: () => request<Suggestion[]>("/admin/suggestions", {}, true),
     setSuggestionStatus: (id: string, status: Suggestion["status"]) =>
       request<{ ok: boolean }>(`/admin/suggestions/${id}/status`, { method: "POST", body: JSON.stringify({ status }) }, true),
+    convertSuggestion: (id: string, body: { route_number?: string; color?: string; bus_count?: number; state?: string; city?: string }) =>
+      request<{ message: string; route: Route }>(`/admin/suggestions/${id}/convert-to-route`, { method: "POST", body: JSON.stringify(body) }, true),
     findStops: (from_point: { lat: number; lng: number }, to_point: { lat: number; lng: number }) =>
       request<{ stops: CorridorStop[] }>("/admin/routes/find-stops", { method: "POST", body: JSON.stringify({ from_point, to_point }) }, true),
   },

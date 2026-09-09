@@ -30,23 +30,27 @@ function Replay() {
   const insets = useSafeAreaInsets();
   const { snapshot } = useLive();
   const buses = useMemo(() => snapshot?.buses ?? [], [snapshot]);
-  const [busId, setBusId] = useState<string | null>(null);
-  const [minutes, setMinutes] = useState(30);
+  const [selectedBusId, setSelectedBusId] = useState<string | null>(null);
+  const busId = selectedBusId ?? buses[0]?.id ?? null;
+  const [minutes, setMinutes] = useState(15);
   const [idx, setIdx] = useState(0);
   const [playing, setPlaying] = useState(false);
   const routesQ = useQuery({ queryKey: ["routes"], queryFn: api.routes, staleTime: 60000 });
 
-  useEffect(() => {
-    if (!busId && buses.length) setBusId(buses[0].id);
-  }, [buses, busId]);
-
   const hist = useQuery({ queryKey: ["history", busId, minutes], queryFn: () => api.admin.history(busId as string, minutes), enabled: !!busId });
   const points = useMemo(() => hist.data?.points ?? [], [hist.data]);
 
-  useEffect(() => {
+  const handleSelectBus = (id: string) => {
+    setSelectedBusId(id);
     setIdx(0);
     setPlaying(false);
-  }, [busId, minutes, hist.data]);
+  };
+
+  const handleSelectMinutes = (m: number) => {
+    setMinutes(m);
+    setIdx(0);
+    setPlaying(false);
+  };
 
   useEffect(() => {
     if (!playing || points.length < 2) return;
@@ -67,8 +71,9 @@ function Replay() {
     () => (routesQ.data ?? []).filter((r) => !bus || r.id === bus.route_id).map((r) => ({ id: r.id, color: r.color, number: r.number, path: r.path.coordinates, stops: r.stops })),
     [routesQ.data, bus],
   );
-  const trail = useMemo(() => points.slice(0, idx + 1).map((p) => ({ lat: p.lat, lng: p.lng })), [points, idx]);
-  const cur = points[idx];
+  const activeIdx = Math.min(idx, Math.max(0, points.length - 1));
+  const trail = useMemo(() => points.slice(0, activeIdx + 1).map((p) => ({ lat: p.lat, lng: p.lng })), [points, activeIdx]);
+  const cur = points[activeIdx];
   const marker = cur && bus ? { lat: cur.lat, lng: cur.lng, label: bus.route_number } : null;
 
   return (
@@ -76,14 +81,14 @@ function Replay() {
       <ScreenHeader title={t("replay")} />
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipRow} contentContainerStyle={styles.chips}>
         {buses.map((b) => (
-          <Pressable key={b.id} onPress={() => setBusId(b.id)} style={[styles.chip, busId === b.id && { backgroundColor: colors.brandPrimary, borderColor: colors.brandPrimary }]} testID={`replay-bus-${b.plate.replace(/\s+/g, "-")}`}>
+          <Pressable key={b.id} onPress={() => handleSelectBus(b.id)} style={[styles.chip, busId === b.id && { backgroundColor: colors.brandPrimary, borderColor: colors.brandPrimary }]} testID={`replay-bus-${b.plate.replace(/\s+/g, "-")}`}>
             <Text style={[styles.chipText, busId === b.id && { color: colors.onBrandPrimary }]}>{b.route_number} · {b.plate}</Text>
           </Pressable>
         ))}
       </ScrollView>
       <View style={styles.windows}>
         {WINDOWS.map((m) => (
-          <Pressable key={m} onPress={() => setMinutes(m)} style={[styles.chip, minutes === m && { backgroundColor: colors.surfaceInverse, borderColor: colors.surfaceInverse }]} testID={`replay-window-${m}`}>
+          <Pressable key={m} onPress={() => handleSelectMinutes(m)} style={[styles.chip, minutes === m && { backgroundColor: colors.surfaceInverse, borderColor: colors.surfaceInverse }]} testID={`replay-window-${m}`}>
             <Text style={[styles.chipText, minutes === m && { color: colors.onSurfaceInverse }]}>{t("lastMinutes", { m })}</Text>
           </Pressable>
         ))}
