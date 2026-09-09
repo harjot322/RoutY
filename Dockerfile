@@ -45,6 +45,9 @@ COPY --from=web-builder /app/frontend/dist ./static
 # Configure runtime environment
 ENV PYTHONUNBUFFERED=1
 ENV PORT=8000
+ENV ADMIN_USERNAME=admin
+ENV ADMIN_PASSWORD=RoutYAdmin2026Secure
+ENV JWT_SECRET=37656e46edb00671989c3e5ac238ab6be1ec9bb6d07cb1848e40441c5e97f0cc
 
 EXPOSE 8000
 
